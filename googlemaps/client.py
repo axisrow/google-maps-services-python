@@ -190,11 +190,11 @@ class Client:
             elif (self.queries_per_minute and type(self.queries_per_minute) == int ):
                 self.queries_quota = math.floor(self.queries_per_minute/60)
             else:
-                sys.exit("MISSING VALID NUMBER for queries_per_second or queries_per_minute")
+                raise ValueError("MISSING VALID NUMBER for queries_per_second or queries_per_minute")
             logger.info("API queries_quota: %s", self.queries_quota)
 
-        except NameError:
-            sys.exit("MISSING VALUE for queries_per_second or queries_per_minute")
+        except (NameError, TypeError):
+            raise ValueError("MISSING VALUE for queries_per_second or queries_per_minute")
 
         self.retry_over_query_limit = retry_over_query_limit
         self.sent_times = collections.deque("", self.queries_quota)
