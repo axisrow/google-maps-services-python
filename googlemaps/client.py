@@ -428,6 +428,23 @@ from googlemaps.places import places_autocomplete
 from googlemaps.places import places_autocomplete_query
 from googlemaps.maps import static_map
 from googlemaps.addressvalidation import addressvalidation
+from googlemaps.airquality import current_air_quality
+from googlemaps.airquality import air_quality_forecast
+from googlemaps.airquality import historical_air_quality
+from googlemaps.airquality import air_quality_heatmap_tile
+from googlemaps.pollen import current_pollen
+from googlemaps.pollen import pollen_forecast
+from googlemaps.pollen import pollen_heatmap_tile
+from googlemaps.weather import current_weather
+from googlemaps.weather import weather_forecast
+from googlemaps.weather import weather_hourly_forecast
+from googlemaps.weather import historical_weather
+from googlemaps.routes import compute_routes
+from googlemaps.routes import compute_route_matrix
+from googlemaps.route_optimization import optimize_tour
+from googlemaps.solar import building_insights
+from googlemaps.solar import solar_data_layers
+from googlemaps.solar import geo_tiff
 
 def make_api_method(func):
     """
@@ -472,6 +489,23 @@ Client.places_autocomplete = make_api_method(places_autocomplete)
 Client.places_autocomplete_query = make_api_method(places_autocomplete_query)
 Client.static_map = make_api_method(static_map)
 Client.addressvalidation = make_api_method(addressvalidation)
+Client.current_air_quality = make_api_method(current_air_quality)
+Client.air_quality_forecast = make_api_method(air_quality_forecast)
+Client.historical_air_quality = make_api_method(historical_air_quality)
+Client.air_quality_heatmap_tile = make_api_method(air_quality_heatmap_tile)
+Client.current_pollen = make_api_method(current_pollen)
+Client.pollen_forecast = make_api_method(pollen_forecast)
+Client.pollen_heatmap_tile = make_api_method(pollen_heatmap_tile)
+Client.current_weather = make_api_method(current_weather)
+Client.weather_forecast = make_api_method(weather_forecast)
+Client.weather_hourly_forecast = make_api_method(weather_hourly_forecast)
+Client.historical_weather = make_api_method(historical_weather)
+Client.compute_routes = make_api_method(compute_routes)
+Client.compute_route_matrix = make_api_method(compute_route_matrix)
+Client.optimize_tour = make_api_method(optimize_tour)
+Client.building_insights = make_api_method(building_insights)
+Client.solar_data_layers = make_api_method(solar_data_layers)
+Client.geo_tiff = make_api_method(geo_tiff)
 
 
 def sign_hmac(secret, payload):
