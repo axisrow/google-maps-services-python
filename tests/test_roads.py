@@ -156,3 +156,64 @@ class RoadsTest(TestCase):
 
         self.assertEqual(2, len(responses.calls))
         self.assertEqual(responses.calls[0].request.url, responses.calls[1].request.url)
+
+    def test_roads_extract_malformed_json(self):
+        """Test _roads_extract with malformed JSON and status 200."""
+        from unittest.mock import Mock
+
+        response = Mock()
+        response.status_code = 200
+        response.json.side_effect = ValueError("Invalid JSON")
+
+        with self.assertRaises(googlemaps.exceptions.ApiError) as context:
+            googlemaps.roads._roads_extract(response)
+
+        self.assertEqual(context.exception.status, "UNKNOWN_ERROR")
+
+    def test_roads_extract_resource_exhausted(self):
+        """Test _roads_extract with RESOURCE_EXHAUSTED error."""
+        from unittest.mock import Mock
+
+        response = Mock()
+        response.status_code = 429
+        response.json.return_value = {"error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}}
+
+        with self.assertRaises(googlemaps.exceptions._OverQueryLimit) as context:
+            googlemaps.roads._roads_extract(response)
+
+        self.assertEqual(context.exception.status, "RESOURCE_EXHAUSTED")
+
+    def test_roads_extract_http_error(self):
+        """Test _roads_extract with HTTP error (non-200 status)."""
+        from unittest.mock import Mock
+
+        response = Mock()
+        response.status_code = 500
+        response.json.return_value = {"speedLimits": []}
+
+        with self.assertRaises(googlemaps.exceptions.HTTPError):
+            googlemaps.roads._roads_extract(response)
+
+    def test_roads_extract_api_error(self):
+        """Test _roads_extract with API error in response."""
+        from unittest.mock import Mock
+
+        response = Mock()
+        response.status_code = 403
+        response.json.return_value = {"error": {"status": "PERMISSION_DENIED", "message": "API not enabled"}}
+
+        with self.assertRaises(googlemaps.exceptions.ApiError) as context:
+            googlemaps.roads._roads_extract(response)
+
+        self.assertEqual(context.exception.status, "PERMISSION_DENIED")
+
+    def test_roads_extract_malformed_json_http_error(self):
+        """Test _roads_extract with malformed JSON and non-200 status."""
+        from unittest.mock import Mock
+
+        response = Mock()
+        response.status_code = 500
+        response.json.side_effect = ValueError("Invalid JSON")
+
+        with self.assertRaises(googlemaps.exceptions.HTTPError):
+            googlemaps.roads._roads_extract(response)

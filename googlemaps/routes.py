@@ -35,16 +35,20 @@ def _routes_extract(response):
     except json.JSONDecodeError:
         raise exceptions.TransportError("Invalid JSON response from API")
 
-    if response.status_code == 200:
-        return body
+    if "error" in body:
+        error = body["error"]
+        status = error.get("status", response.status_code)
+        message = error.get("message")
 
-    error = body.get("error", {})
-    message = error.get("message", "Unknown error")
+        if response.status_code == 403 or status == "RESOURCE_EXHAUSTED":
+            raise exceptions._OverQueryLimit(status, message)
 
-    if response.status_code == 403:
-        raise exceptions._OverQueryLimit(response.status_code, message)
-    else:
-        raise exceptions.ApiError(response.status_code, message)
+        raise exceptions.ApiError(status, message)
+
+    if response.status_code != 200:
+        raise exceptions.HTTPError(response.status_code)
+
+    return body
 
 
 def _format_waypoint(waypoint):
@@ -63,12 +67,22 @@ def _format_waypoint(waypoint):
             return {"placeId": waypoint[9:]}
         return {"address": waypoint}
     elif isinstance(waypoint, (tuple, list)):
+        if len(waypoint) != 2:
+            raise ValueError("Invalid waypoint format: %s" % waypoint)
         return {"location": {"latLng": {"latitude": waypoint[0], "longitude": waypoint[1]}}}
     elif isinstance(waypoint, dict):
         if "placeId" in waypoint or "address" in waypoint or "location" in waypoint:
             return waypoint
-        # Assume it's a lat/lng dict
-        return {"location": {"latLng": {"latitude": waypoint.get("lat"), "longitude": waypoint.get("lng")}}}
+        if "lat" in waypoint and "lng" in waypoint:
+            return {
+                "location": {
+                    "latLng": {
+                        "latitude": waypoint["lat"],
+                        "longitude": waypoint["lng"],
+                    }
+                }
+            }
+        raise ValueError("Invalid waypoint format: %s" % waypoint)
     else:
         raise ValueError("Invalid waypoint format: %s" % waypoint)
 
@@ -252,6 +266,7 @@ def compute_routes(client, origin, destination, intermediates=None,
         "/directions/v2:computeRoutes",
         {},
         base_url=_ROUTES_BASE_URL,
+        accepts_clientid=False,
         extract_body=_routes_extract,
         post_json=request_body,
         requests_kwargs={"headers": headers}
@@ -379,6 +394,7 @@ def compute_route_matrix(client, origins, destinations, travel_mode=None,
         "/distanceMatrix/v2:computeRouteMatrix",
         {},
         base_url=_ROUTES_BASE_URL,
+        accepts_clientid=False,
         extract_body=_routes_extract,
         post_json=request_body,
         requests_kwargs={"headers": headers}

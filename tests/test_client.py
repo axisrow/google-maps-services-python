@@ -31,6 +31,30 @@ from googlemaps.client import _X_GOOG_MAPS_EXPERIENCE_ID
 
 
 class ClientTest(TestCase):
+    def test_new_api_methods_registered(self):
+        client = googlemaps.Client(key="AIzaasdf")
+
+        for attr in (
+            "current_air_quality",
+            "air_quality_forecast",
+            "historical_air_quality",
+            "air_quality_heatmap_tile",
+            "current_pollen",
+            "pollen_forecast",
+            "pollen_heatmap_tile",
+            "current_weather",
+            "weather_forecast",
+            "weather_hourly_forecast",
+            "historical_weather",
+            "compute_routes",
+            "compute_route_matrix",
+            "optimize_tour",
+            "building_insights",
+            "solar_data_layers",
+            "geo_tiff",
+        ):
+            self.assertTrue(hasattr(client, attr), attr)
+
     def test_no_api_key(self):
         with self.assertRaises(Exception):
             client = googlemaps.Client()

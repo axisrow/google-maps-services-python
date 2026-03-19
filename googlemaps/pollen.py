@@ -35,16 +35,28 @@ def _pollen_extract(response):
     except json.JSONDecodeError:
         raise exceptions.TransportError("Invalid JSON response from API")
 
-    if response.status_code == 200:
-        return body
+    if "error" in body:
+        error = body["error"]
+        status = error.get("status", response.status_code)
+        message = error.get("message")
 
-    error = body.get("error", {})
-    message = error.get("message", "Unknown error")
+        if response.status_code == 403 or status == "RESOURCE_EXHAUSTED":
+            raise exceptions._OverQueryLimit(status, message)
 
-    if response.status_code == 403:
-        raise exceptions._OverQueryLimit(response.status_code, message)
-    else:
-        raise exceptions.ApiError(response.status_code, message)
+        raise exceptions.ApiError(status, message)
+
+    if response.status_code != 200:
+        raise exceptions.HTTPError(response.status_code)
+
+    return body
+
+
+def _current_pollen_extract(response):
+    body = _pollen_extract(response)
+    daily_info = body.get("dailyInfo", [])
+    if daily_info:
+        return daily_info[0]
+    return {}
 
 
 def _format_pollen_location(location):
@@ -87,22 +99,25 @@ def current_pollen(client, location, language_code=None, plants_description=None
     :rtype: dict containing current pollen information
     """
 
-    request_body = {
-        "location": _format_pollen_location(location),
+    formatted_location = _format_pollen_location(location)
+    params = {
+        "location.latitude": formatted_location["latitude"],
+        "location.longitude": formatted_location["longitude"],
+        "days": 1,
     }
 
     if language_code:
-        request_body["languageCode"] = language_code
+        params["languageCode"] = language_code
 
     if plants_description is not None:
-        request_body["plantsDescription"] = plants_description
+        params["plantsDescription"] = plants_description
 
     return client._request(
-        "/v1/currentConditions:lookup",
-        {},
+        "/v1/forecast:lookup",
+        params,
         base_url=_POLLEN_BASE_URL,
-        extract_body=_pollen_extract,
-        post_json=request_body
+        accepts_clientid=False,
+        extract_body=_current_pollen_extract
     )
 
 
@@ -134,31 +149,33 @@ def pollen_forecast(client, location, days=None, language_code=None,
     :rtype: dict containing forecast information
     """
 
-    request_body = {
-        "location": _format_pollen_location(location),
+    formatted_location = _format_pollen_location(location)
+    params = {
+        "location.latitude": formatted_location["latitude"],
+        "location.longitude": formatted_location["longitude"],
     }
 
     if days:
-        request_body["days"] = days
+        params["days"] = days
 
     if language_code:
-        request_body["languageCode"] = language_code
+        params["languageCode"] = language_code
 
     if plants_description is not None:
-        request_body["plantsDescription"] = plants_description
+        params["plantsDescription"] = plants_description
 
     if page_size:
-        request_body["pageSize"] = page_size
+        params["pageSize"] = page_size
 
     if page_token:
-        request_body["pageToken"] = page_token
+        params["pageToken"] = page_token
 
     return client._request(
         "/v1/forecast:lookup",
-        {},
+        params,
         base_url=_POLLEN_BASE_URL,
-        extract_body=_pollen_extract,
-        post_json=request_body
+        accepts_clientid=False,
+        extract_body=_pollen_extract
     )
 
 

@@ -216,3 +216,167 @@ class DistanceMatrixTest(TestCase):
             "place_id%%3AChIJjQmTaV0E9YgRC2MLmS_e_mY" % self.key,
             responses.calls[0].request.url,
         )
+
+    @responses.activate
+    def test_transit_mode_list(self):
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/distancematrix/json",
+            body='{"status":"OK","rows":[]}',
+            status=200,
+            content_type="application/json",
+        )
+
+        origins = ["New York, NY"]
+        destinations = ["Boston, MA"]
+
+        matrix = self.client.distance_matrix(
+            origins,
+            destinations,
+            mode="transit",
+            transit_mode=["bus", "subway", "train"]
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertIn("transit_mode=bus%7Csubway%7Ctrain", responses.calls[0].request.url)
+
+    @responses.activate
+    def test_transit_mode_single_string(self):
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/distancematrix/json",
+            body='{"status":"OK","rows":[]}',
+            status=200,
+            content_type="application/json",
+        )
+
+        origins = ["New York, NY"]
+        destinations = ["Boston, MA"]
+
+        matrix = self.client.distance_matrix(
+            origins,
+            destinations,
+            mode="transit",
+            transit_mode="rail"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertIn("transit_mode=rail", responses.calls[0].request.url)
+
+    @responses.activate
+    def test_transit_routing_preference(self):
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/distancematrix/json",
+            body='{"status":"OK","rows":[]}',
+            status=200,
+            content_type="application/json",
+        )
+
+        origins = ["New York, NY"]
+        destinations = ["Boston, MA"]
+
+        matrix = self.client.distance_matrix(
+            origins,
+            destinations,
+            mode="transit",
+            transit_routing_preference="fewer_transfers"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertIn("transit_routing_preference=fewer_transfers", responses.calls[0].request.url)
+
+    @responses.activate
+    def test_transit_routing_preference_less_walking(self):
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/distancematrix/json",
+            body='{"status":"OK","rows":[]}',
+            status=200,
+            content_type="application/json",
+        )
+
+        origins = ["New York, NY"]
+        destinations = ["Boston, MA"]
+
+        matrix = self.client.distance_matrix(
+            origins,
+            destinations,
+            mode="transit",
+            transit_routing_preference="less_walking"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertIn("transit_routing_preference=less_walking", responses.calls[0].request.url)
+
+    @responses.activate
+    def test_region_param(self):
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/distancematrix/json",
+            body='{"status":"OK","rows":[]}',
+            status=200,
+            content_type="application/json",
+        )
+
+        origins = ["Sydney"]
+        destinations = ["Melbourne"]
+
+        matrix = self.client.distance_matrix(
+            origins,
+            destinations,
+            region="au"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertIn("region=au", responses.calls[0].request.url)
+
+    @responses.activate
+    def test_traffic_model_pessimistic(self):
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/distancematrix/json",
+            body='{"status":"OK","rows":[]}',
+            status=200,
+            content_type="application/json",
+        )
+
+        origins = ["New York, NY"]
+        destinations = ["Boston, MA"]
+        now = datetime.now()
+
+        matrix = self.client.distance_matrix(
+            origins,
+            destinations,
+            mode="driving",
+            departure_time=now,
+            traffic_model="pessimistic"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertIn("traffic_model=pessimistic", responses.calls[0].request.url)
+
+    @responses.activate
+    def test_traffic_model_best_guess(self):
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/distancematrix/json",
+            body='{"status":"OK","rows":[]}',
+            status=200,
+            content_type="application/json",
+        )
+
+        origins = ["New York, NY"]
+        destinations = ["Boston, MA"]
+        now = datetime.now()
+
+        matrix = self.client.distance_matrix(
+            origins,
+            destinations,
+            mode="driving",
+            departure_time=now,
+            traffic_model="best_guess"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertIn("traffic_model=best_guess", responses.calls[0].request.url)

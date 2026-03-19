@@ -18,6 +18,7 @@
 """Performs requests to the Google Maps Weather API."""
 
 import json
+from datetime import datetime
 
 from googlemaps import exceptions
 
@@ -35,16 +36,20 @@ def _weather_extract(response):
     except json.JSONDecodeError:
         raise exceptions.TransportError("Invalid JSON response from API")
 
-    if response.status_code == 200:
-        return body
+    if "error" in body:
+        error = body["error"]
+        status = error.get("status", response.status_code)
+        message = error.get("message")
 
-    error = body.get("error", {})
-    message = error.get("message", "Unknown error")
+        if response.status_code == 403 or status == "RESOURCE_EXHAUSTED":
+            raise exceptions._OverQueryLimit(status, message)
 
-    if response.status_code == 403:
-        raise exceptions._OverQueryLimit(response.status_code, message)
-    else:
-        raise exceptions.ApiError(response.status_code, message)
+        raise exceptions.ApiError(status, message)
+
+    if response.status_code != 200:
+        raise exceptions.HTTPError(response.status_code)
+
+    return body
 
 
 def _format_weather_location(location):
@@ -64,6 +69,59 @@ def _format_weather_location(location):
         elif "lat" in location and "lng" in location:
             return {"latitude": location["lat"], "longitude": location["lng"]}
     raise ValueError("Invalid location format: %s" % location)
+
+
+def _parse_time(time_value):
+    if isinstance(time_value, datetime):
+        return time_value
+    if isinstance(time_value, str):
+        return datetime.fromisoformat(time_value.replace("Z", "+00:00"))
+    raise ValueError("Invalid time value: %s" % time_value)
+
+
+def _period_to_size(period, unit_seconds):
+    if period is None:
+        return None
+
+    if isinstance(period, tuple):
+        start_time, end_time = period
+    elif isinstance(period, dict):
+        start_time = period.get("startTime")
+        end_time = period.get("endTime")
+    else:
+        raise ValueError("Invalid period format: %s" % period)
+
+    if start_time is None or end_time is None:
+        raise ValueError("period must include startTime and endTime")
+
+    delta_seconds = (_parse_time(end_time) - _parse_time(start_time)).total_seconds()
+    if delta_seconds <= 0:
+        raise ValueError("period endTime must be after startTime")
+
+    return max(1, int((delta_seconds + unit_seconds - 1) // unit_seconds))
+
+
+def _weather_params(location, language_code=None, units=None, page_size=None,
+                    page_token=None):
+    formatted_location = _format_weather_location(location)
+    params = {
+        "location.latitude": formatted_location["latitude"],
+        "location.longitude": formatted_location["longitude"],
+    }
+
+    if language_code:
+        params["languageCode"] = language_code
+
+    if units:
+        params["unitsSystem"] = units
+
+    if page_size:
+        params["pageSize"] = page_size
+
+    if page_token:
+        params["pageToken"] = page_token
+
+    return params
 
 
 def current_weather(client, location, weather_elements=None, extra_computations=None,
@@ -99,28 +157,18 @@ def current_weather(client, location, weather_elements=None, extra_computations=
     :rtype: dict containing current weather information
     """
 
-    request_body = {
-        "location": _format_weather_location(location),
-    }
-
-    if weather_elements:
-        request_body["weatherElements"] = weather_elements
-
-    if extra_computations:
-        request_body["extraComputations"] = extra_computations
-
-    if language_code:
-        request_body["languageCode"] = language_code
-
-    if units:
-        request_body["units"] = units
+    params = _weather_params(
+        location,
+        language_code=language_code,
+        units=units,
+    )
 
     return client._request(
         "/v1/currentConditions:lookup",
-        {},
+        params,
         base_url=_WEATHER_BASE_URL,
-        extract_body=_weather_extract,
-        post_json=request_body
+        accepts_clientid=False,
+        extract_body=_weather_extract
     )
 
 
@@ -159,37 +207,23 @@ def weather_forecast(client, location, weather_elements=None, extra_computations
     :rtype: dict containing forecast information
     """
 
-    request_body = {
-        "location": _format_weather_location(location),
-    }
-
-    if weather_elements:
-        request_body["weatherElements"] = weather_elements
-
-    if extra_computations:
-        request_body["extraComputations"] = extra_computations
-
-    if language_code:
-        request_body["languageCode"] = language_code
-
-    if units:
-        request_body["units"] = units
+    params = _weather_params(
+        location,
+        language_code=language_code,
+        units=units,
+        page_size=page_size,
+        page_token=page_token,
+    )
 
     if period:
-        request_body["period"] = period
-
-    if page_size:
-        request_body["pageSize"] = page_size
-
-    if page_token:
-        request_body["pageToken"] = page_token
+        params["days"] = _period_to_size(period, 86400)
 
     return client._request(
-        "/v1/forecast:lookup",
-        {},
+        "/v1/forecast/days:lookup",
+        params,
         base_url=_WEATHER_BASE_URL,
-        extract_body=_weather_extract,
-        post_json=request_body
+        accepts_clientid=False,
+        extract_body=_weather_extract
     )
 
 
@@ -228,37 +262,23 @@ def weather_hourly_forecast(client, location, weather_elements=None, extra_compu
     :rtype: dict containing hourly forecast information
     """
 
-    request_body = {
-        "location": _format_weather_location(location),
-    }
-
-    if weather_elements:
-        request_body["weatherElements"] = weather_elements
-
-    if extra_computations:
-        request_body["extraComputations"] = extra_computations
-
-    if language_code:
-        request_body["languageCode"] = language_code
-
-    if units:
-        request_body["units"] = units
+    params = _weather_params(
+        location,
+        language_code=language_code,
+        units=units,
+        page_size=page_size,
+        page_token=page_token,
+    )
 
     if period:
-        request_body["period"] = period
-
-    if page_size:
-        request_body["pageSize"] = page_size
-
-    if page_token:
-        request_body["pageToken"] = page_token
+        params["hours"] = _period_to_size(period, 3600)
 
     return client._request(
         "/v1/forecast/hours:lookup",
-        {},
+        params,
         base_url=_WEATHER_BASE_URL,
-        extract_body=_weather_extract,
-        post_json=request_body
+        accepts_clientid=False,
+        extract_body=_weather_extract
     )
 
 
@@ -297,33 +317,19 @@ def historical_weather(client, location, period, weather_elements=None,
     :rtype: dict containing historical weather information
     """
 
-    request_body = {
-        "location": _format_weather_location(location),
-        "period": period,
-    }
-
-    if weather_elements:
-        request_body["weatherElements"] = weather_elements
-
-    if extra_computations:
-        request_body["extraComputations"] = extra_computations
-
-    if language_code:
-        request_body["languageCode"] = language_code
-
-    if units:
-        request_body["units"] = units
-
-    if page_size:
-        request_body["pageSize"] = page_size
-
-    if page_token:
-        request_body["pageToken"] = page_token
+    params = _weather_params(
+        location,
+        language_code=language_code,
+        units=units,
+        page_size=page_size,
+        page_token=page_token,
+    )
+    params["hours"] = _period_to_size(period, 3600)
 
     return client._request(
-        "/v1/history:lookup",
-        {},
+        "/v1/history/hours:lookup",
+        params,
         base_url=_WEATHER_BASE_URL,
-        extract_body=_weather_extract,
-        post_json=request_body
+        accepts_clientid=False,
+        extract_body=_weather_extract
     )
