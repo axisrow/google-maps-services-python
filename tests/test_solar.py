@@ -96,23 +96,25 @@ class SolarTest(TestCase):
 
         self.assertEqual(1, len(responses.calls))
         url = responses.calls[0].request.url
+        self.assertIn("radiusMeters=100", url)
         self.assertIn("requiredQuality=MEDIUM", url)
         self.assertIn("pixelSizeMeters=500", url)
-        self.assertIn("view=FULL_DATASET", url)
+        self.assertIn("view=FULL_LAYERS", url)
 
     @responses.activate
     def test_geo_tiff(self):
         responses.add(
             responses.GET,
-            "https://solar.googleapis.com/v1/geoTiff/test",
+            "https://solar.googleapis.com/v1/geoTiff:get",
             body=b'\x00\x01\x02\x03',
             status=200,
             content_type="image/tiff",
         )
 
-        result = self.client.geo_tiff("https://solar.googleapis.com/v1/geoTiff/test")
+        result = self.client.geo_tiff("https://solar.googleapis.com/v1/geoTiff:get?id=test-asset")
 
         self.assertEqual(1, len(responses.calls))
+        self.assertIn("id=test-asset", responses.calls[0].request.url)
         self.assertEqual(result, b'\x00\x01\x02\x03')
 
     def test_geo_tiff_invalid_url_empty(self):
@@ -125,18 +127,30 @@ class SolarTest(TestCase):
 
     def test_geo_tiff_invalid_url_http(self):
         with self.assertRaises(ValueError):
-            self.client.geo_tiff("http://solar.googleapis.com/geoTiff")
+            self.client.geo_tiff("http://solar.googleapis.com/v1/geoTiff:get?id=test")
+
+    def test_geo_tiff_invalid_url_username(self):
+        with self.assertRaises(ValueError):
+            self.client.geo_tiff("https://solar.googleapis.com@evil.com/v1/geoTiff:get?id=test")
+
+    def test_geo_tiff_invalid_url_subdomain(self):
+        with self.assertRaises(ValueError):
+            self.client.geo_tiff("https://solar.googleapis.com.evil.com/v1/geoTiff:get?id=test")
+
+    def test_geo_tiff_invalid_url_missing_id(self):
+        with self.assertRaises(ValueError):
+            self.client.geo_tiff("https://solar.googleapis.com/v1/geoTiff:get")
 
     @responses.activate
     def test_geo_tiff_error(self):
         responses.add(
             responses.GET,
-            "https://solar.googleapis.com/v1/geoTiff/test",
+            "https://solar.googleapis.com/v1/geoTiff:get",
             status=404,
         )
 
         with self.assertRaises(exceptions.HTTPError):
-            self.client.geo_tiff("https://solar.googleapis.com/v1/geoTiff/test")
+            self.client.geo_tiff("https://solar.googleapis.com/v1/geoTiff:get?id=test-asset")
 
     def test_format_solar_location_tuple(self):
         result = solar._format_solar_location((40.0, -74.0))
@@ -177,10 +191,15 @@ class SolarExtractTest(TestCase):
 
         response = Mock()
         response.status_code = 403
-        response.json.return_value = {"error": {"message": "Quota exceeded"}}
+        response.json.return_value = {
+            "error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}
+        }
 
-        with self.assertRaises(exceptions._OverQueryLimit):
+        with self.assertRaises(exceptions._OverQueryLimit) as context:
             solar._solar_extract(response)
+
+        self.assertEqual(context.exception.status, "RESOURCE_EXHAUSTED")
+        self.assertEqual(context.exception.message, "Quota exceeded")
 
     def test_extract_api_error(self):
         """Test _solar_extract with other API error."""
@@ -188,10 +207,15 @@ class SolarExtractTest(TestCase):
 
         response = Mock()
         response.status_code = 400
-        response.json.return_value = {"error": {"message": "Bad request"}}
+        response.json.return_value = {
+            "error": {"status": "INVALID_ARGUMENT", "message": "Bad request"}
+        }
 
-        with self.assertRaises(exceptions.ApiError):
+        with self.assertRaises(exceptions.ApiError) as context:
             solar._solar_extract(response)
+
+        self.assertEqual(context.exception.status, "INVALID_ARGUMENT")
+        self.assertEqual(context.exception.message, "Bad request")
 
     def test_extract_json_decode_error(self):
         """Test _solar_extract with invalid JSON."""

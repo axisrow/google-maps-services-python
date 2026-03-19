@@ -18,11 +18,16 @@
 """Performs requests to the Google Maps Solar API."""
 
 import json
+from urllib.parse import parse_qs
+from urllib.parse import urlparse
 
 from googlemaps import exceptions
 
 
 _SOLAR_BASE_URL = "https://solar.googleapis.com"
+_SOLAR_VIEW_ALIASES = {
+    "FULL_DATASET": "FULL_LAYERS",
+}
 
 
 def _solar_extract(response):
@@ -35,16 +40,44 @@ def _solar_extract(response):
     except json.JSONDecodeError:
         raise exceptions.TransportError("Invalid JSON response from API")
 
-    if response.status_code == 200:
-        return body
+    if "error" in body:
+        error = body["error"]
+        status = error.get("status", response.status_code)
+        message = error.get("message")
 
-    error = body.get("error", {})
-    message = error.get("message", "Unknown error")
+        if response.status_code == 403 or status == "RESOURCE_EXHAUSTED":
+            raise exceptions._OverQueryLimit(status, message)
 
-    if response.status_code == 403:
-        raise exceptions._OverQueryLimit(response.status_code, message)
-    else:
-        raise exceptions.ApiError(response.status_code, message)
+        raise exceptions.ApiError(status, message)
+
+    if response.status_code != 200:
+        raise exceptions.HTTPError(response.status_code)
+
+    return body
+
+
+def _extract_geotiff_id(asset):
+    if not asset:
+        raise ValueError("GeoTIFF asset URL or id is required")
+
+    if "://" not in asset:
+        return asset
+
+    parsed = urlparse(asset)
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "solar.googleapis.com"
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path != "/v1/geoTiff:get"
+    ):
+        raise ValueError("URL must target https://solar.googleapis.com/v1/geoTiff:get")
+
+    geotiff_ids = parse_qs(parsed.query).get("id", [])
+    if len(geotiff_ids) != 1 or not geotiff_ids[0]:
+        raise ValueError("GeoTIFF URL must include a single non-empty id query param")
+
+    return geotiff_ids[0]
 
 
 def _format_solar_location(location):
@@ -98,12 +131,14 @@ def building_insights(client, location, required_quality=None):
         "/v1/buildingInsights:findClosest",
         params,
         base_url=_SOLAR_BASE_URL,
+        accepts_clientid=False,
         extract_body=_solar_extract
     )
 
 
 def solar_data_layers(client, location, required_quality=None,
-                      pixel_size_meters=None, view=None):
+                      pixel_size_meters=None, view=None,
+                      radius_meters=100, exact_quality_required=None):
     """Returns solar data layers (imagery) for a region around a location.
 
     The data layers include Digital Surface Model (DSM), Digital Terrain Model (DTM),
@@ -133,6 +168,7 @@ def solar_data_layers(client, location, required_quality=None,
     params = {
         "location.latitude": _format_solar_location(location)["latitude"],
         "location.longitude": _format_solar_location(location)["longitude"],
+        "radiusMeters": radius_meters,
     }
 
     if required_quality:
@@ -142,12 +178,16 @@ def solar_data_layers(client, location, required_quality=None,
         params["pixelSizeMeters"] = pixel_size_meters
 
     if view:
-        params["view"] = view
+        params["view"] = _SOLAR_VIEW_ALIASES.get(view, view)
+
+    if exact_quality_required is not None:
+        params["exactQualityRequired"] = exact_quality_required
 
     return client._request(
         "/v1/dataLayers:get",
         params,
         base_url=_SOLAR_BASE_URL,
+        accepts_clientid=False,
         extract_body=_solar_extract
     )
 
@@ -160,14 +200,16 @@ def geo_tiff(client, url):
 
     :rtype: bytes (GeoTIFF image data)
     """
-    # Validate URL to prevent SSRF
-    if not url or not url.startswith("https://solar.googleapis.com"):
-        raise ValueError("URL must be from solar.googleapis.com domain, got: %s" % url)
+    geotiff_id = _extract_geotiff_id(url)
 
-    # For GeoTIFF, we need to return raw bytes
+    authed_url = client._generate_auth_url(
+        "/v1/geoTiff:get",
+        {"id": geotiff_id},
+        accepts_clientid=False,
+    )
     timeout = client.timeout if client.timeout is not None else 30
     try:
-        response = client.session.get(url, timeout=timeout)
+        response = client.session.get(_SOLAR_BASE_URL + authed_url, timeout=timeout)
     except Exception as e:
         raise exceptions.TransportError(e)
 

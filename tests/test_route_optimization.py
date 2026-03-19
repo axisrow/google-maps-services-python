@@ -36,7 +36,7 @@ class RouteOptimizationTest(TestCase):
     def test_optimize_tour_basic(self):
         responses.add(
             responses.POST,
-            "https://routeoptimization.googleapis.com/v1/projects/my-project:optimizeTour",
+            "https://routeoptimization.googleapis.com/v1/projects/my-project:optimizeTours",
             body='{"routes": []}',
             status=200,
             content_type="application/json",
@@ -69,7 +69,7 @@ class RouteOptimizationTest(TestCase):
     def test_optimize_tour_with_all_params(self):
         responses.add(
             responses.POST,
-            "https://routeoptimization.googleapis.com/v1/projects/my-project:optimizeTour",
+            "https://routeoptimization.googleapis.com/v1/projects/my-project:optimizeTours",
             body='{"routes": [], "metrics": {}}',
             status=200,
             content_type="application/json",
@@ -102,6 +102,24 @@ class RouteOptimizationTest(TestCase):
         self.assertEqual(body["costModel"], "COST_MODEL_STATIC")
         self.assertEqual(body["searchMode"], "PARALLEL_SCH_FAST")
         self.assertEqual(body["geodesicMetersPerSecond"], 10.0)
+
+    @responses.activate
+    def test_optimize_tour_with_location_parent(self):
+        responses.add(
+            responses.POST,
+            "https://routeoptimization.googleapis.com/v1/projects/my-project/locations/us-central1:optimizeTours",
+            body='{"routes": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        result = self.client.optimize_tour(
+            parent="projects/my-project/locations/us-central1",
+            model={"shipments": [], "vehicles": []},
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertIn("routes", result)
 
     def test_optimize_tour_invalid_parent(self):
         model = {"shipments": [], "vehicles": []}
@@ -162,10 +180,15 @@ class RouteOptimizationExtractTest(TestCase):
 
         response = Mock()
         response.status_code = 403
-        response.json.return_value = {"error": {"message": "Quota exceeded"}}
+        response.json.return_value = {
+            "error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}
+        }
 
-        with self.assertRaises(exceptions._OverQueryLimit):
+        with self.assertRaises(exceptions._OverQueryLimit) as context:
             route_optimization._route_optimization_extract(response)
+
+        self.assertEqual(context.exception.status, "RESOURCE_EXHAUSTED")
+        self.assertEqual(context.exception.message, "Quota exceeded")
 
     def test_extract_api_error(self):
         """Test _route_optimization_extract with other API error."""
@@ -173,10 +196,15 @@ class RouteOptimizationExtractTest(TestCase):
 
         response = Mock()
         response.status_code = 400
-        response.json.return_value = {"error": {"message": "Bad request"}}
+        response.json.return_value = {
+            "error": {"status": "INVALID_ARGUMENT", "message": "Bad request"}
+        }
 
-        with self.assertRaises(exceptions.ApiError):
+        with self.assertRaises(exceptions.ApiError) as context:
             route_optimization._route_optimization_extract(response)
+
+        self.assertEqual(context.exception.status, "INVALID_ARGUMENT")
+        self.assertEqual(context.exception.message, "Bad request")
 
     def test_extract_json_decode_error(self):
         """Test _route_optimization_extract with invalid JSON."""

@@ -35,16 +35,20 @@ def _airquality_extract(response):
     except json.JSONDecodeError:
         raise exceptions.TransportError("Invalid JSON response from API")
 
-    if response.status_code == 200:
-        return body
+    if "error" in body:
+        error = body["error"]
+        status = error.get("status", response.status_code)
+        message = error.get("message")
 
-    error = body.get("error", {})
-    message = error.get("message", "Unknown error")
+        if response.status_code == 403 or status == "RESOURCE_EXHAUSTED":
+            raise exceptions._OverQueryLimit(status, message)
 
-    if response.status_code == 403:
-        raise exceptions._OverQueryLimit(response.status_code, message)
-    else:
-        raise exceptions.ApiError(response.status_code, message)
+        raise exceptions.ApiError(status, message)
+
+    if response.status_code != 200:
+        raise exceptions.HTTPError(response.status_code)
+
+    return body
 
 
 def _format_location(location):
@@ -120,6 +124,7 @@ def current_air_quality(client, location, extra_computations=None,
         "/v1/currentConditions:lookup",
         {},
         base_url=_AIRQUALITY_BASE_URL,
+        accepts_clientid=False,
         extract_body=_airquality_extract,
         post_json=request_body
     )
@@ -197,6 +202,7 @@ def air_quality_forecast(client, location, period=None, extra_computations=None,
         "/v1/forecast:lookup",
         {},
         base_url=_AIRQUALITY_BASE_URL,
+        accepts_clientid=False,
         extract_body=_airquality_extract,
         post_json=request_body
     )
@@ -274,6 +280,7 @@ def historical_air_quality(client, location, period, extra_computations=None,
         "/v1/history:lookup",
         {},
         base_url=_AIRQUALITY_BASE_URL,
+        accepts_clientid=False,
         extract_body=_airquality_extract,
         post_json=request_body
     )

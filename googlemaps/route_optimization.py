@@ -18,6 +18,7 @@
 """Performs requests to the Google Maps Route Optimization API."""
 
 import json
+import re
 
 from googlemaps import exceptions
 
@@ -35,16 +36,20 @@ def _route_optimization_extract(response):
     except json.JSONDecodeError:
         raise exceptions.TransportError("Invalid JSON response from API")
 
-    if response.status_code == 200:
-        return body
+    if "error" in body:
+        error = body["error"]
+        status = error.get("status", response.status_code)
+        message = error.get("message")
 
-    error = body.get("error", {})
-    message = error.get("message", "Unknown error")
+        if response.status_code == 403 or status == "RESOURCE_EXHAUSTED":
+            raise exceptions._OverQueryLimit(status, message)
 
-    if response.status_code == 403:
-        raise exceptions._OverQueryLimit(response.status_code, message)
-    else:
-        raise exceptions.ApiError(response.status_code, message)
+        raise exceptions.ApiError(status, message)
+
+    if response.status_code != 200:
+        raise exceptions.HTTPError(response.status_code)
+
+    return body
 
 
 def _format_ro_location(location):
@@ -142,8 +147,11 @@ def optimize_tour(client, parent, model, timeout=None, populate_transition_polyl
     """
 
     # Validate parent format
-    if not parent or not parent.startswith("projects/"):
-        raise ValueError("parent must be in format 'projects/{projectId}', got: %s" % parent)
+    if not parent or not re.match(r"^projects/[^/]+(?:/locations/[^/]+)?$", parent):
+        raise ValueError(
+            "parent must be in format 'projects/{projectId}' or "
+            "'projects/{projectId}/locations/{locationId}', got: %s" % parent
+        )
 
     request_body = {
         "model": model,
@@ -174,9 +182,10 @@ def optimize_tour(client, parent, model, timeout=None, populate_transition_polyl
         request_body["maxInterpolationDistanceMeters"] = max_interpolation_distance_meters
 
     return client._request(
-        "/v1/%s:optimizeTour" % parent,
+        "/v1/%s:optimizeTours" % parent,
         {},
         base_url=_ROUTE_OPTIMIZATION_BASE_URL,
+        accepts_clientid=False,
         extract_body=_route_optimization_extract,
         post_json=request_body
     )

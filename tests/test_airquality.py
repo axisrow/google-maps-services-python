@@ -221,7 +221,6 @@ class AirQualityTest(TestCase):
 class AirQualityExtractTest(TestCase):
     def test_extract_success(self):
         """Test _airquality_extract with successful response."""
-        import requests
         from unittest.mock import Mock
 
         response = Mock()
@@ -237,10 +236,15 @@ class AirQualityExtractTest(TestCase):
 
         response = Mock()
         response.status_code = 403
-        response.json.return_value = {"error": {"message": "Quota exceeded"}}
+        response.json.return_value = {
+            "error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}
+        }
 
-        with self.assertRaises(exceptions._OverQueryLimit):
+        with self.assertRaises(exceptions._OverQueryLimit) as context:
             airquality._airquality_extract(response)
+
+        self.assertEqual(context.exception.status, "RESOURCE_EXHAUSTED")
+        self.assertEqual(context.exception.message, "Quota exceeded")
 
     def test_extract_api_error(self):
         """Test _airquality_extract with other API error."""
@@ -248,10 +252,15 @@ class AirQualityExtractTest(TestCase):
 
         response = Mock()
         response.status_code = 400
-        response.json.return_value = {"error": {"message": "Bad request"}}
+        response.json.return_value = {
+            "error": {"status": "INVALID_ARGUMENT", "message": "Bad request"}
+        }
 
-        with self.assertRaises(exceptions.ApiError):
+        with self.assertRaises(exceptions.ApiError) as context:
             airquality._airquality_extract(response)
+
+        self.assertEqual(context.exception.status, "INVALID_ARGUMENT")
+        self.assertEqual(context.exception.message, "Bad request")
 
     def test_extract_json_decode_error(self):
         """Test _airquality_extract with invalid JSON."""

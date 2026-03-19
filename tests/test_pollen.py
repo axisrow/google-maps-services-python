@@ -35,9 +35,9 @@ class PollenTest(TestCase):
     @responses.activate
     def test_current_pollen(self):
         responses.add(
-            responses.POST,
-            "https://pollen.googleapis.com/v1/currentConditions:lookup",
-            body='{"location": {"latitude": 40.0, "longitude": -74.0}, "pollenTypeInfo": []}',
+            responses.GET,
+            "https://pollen.googleapis.com/v1/forecast:lookup",
+            body='{"dailyInfo": [{"pollenTypeInfo": []}]}',
             status=200,
             content_type="application/json",
         )
@@ -50,9 +50,9 @@ class PollenTest(TestCase):
     @responses.activate
     def test_current_pollen_with_params(self):
         responses.add(
-            responses.POST,
-            "https://pollen.googleapis.com/v1/currentConditions:lookup",
-            body='{"location": {"latitude": 40.0, "longitude": -74.0}}',
+            responses.GET,
+            "https://pollen.googleapis.com/v1/forecast:lookup",
+            body='{"dailyInfo": [{"pollenTypeInfo": []}]}',
             status=200,
             content_type="application/json",
         )
@@ -64,14 +64,14 @@ class PollenTest(TestCase):
         )
 
         self.assertEqual(1, len(responses.calls))
-        body = json.loads(responses.calls[0].request.body)
-        self.assertEqual(body["languageCode"], "en")
-        self.assertTrue(body["plantsDescription"])
+        self.assertIn("days=1", responses.calls[0].request.url)
+        self.assertIn("languageCode=en", responses.calls[0].request.url)
+        self.assertIn("plantsDescription=True", responses.calls[0].request.url)
 
     @responses.activate
     def test_pollen_forecast(self):
         responses.add(
-            responses.POST,
+            responses.GET,
             "https://pollen.googleapis.com/v1/forecast:lookup",
             body='{"dailyInfo": []}',
             status=200,
@@ -81,13 +81,12 @@ class PollenTest(TestCase):
         self.client.pollen_forecast((40.0, -74.0), days=5)
 
         self.assertEqual(1, len(responses.calls))
-        body = json.loads(responses.calls[0].request.body)
-        self.assertEqual(body["days"], 5)
+        self.assertIn("days=5", responses.calls[0].request.url)
 
     @responses.activate
     def test_pollen_forecast_with_pagination(self):
         responses.add(
-            responses.POST,
+            responses.GET,
             "https://pollen.googleapis.com/v1/forecast:lookup",
             body='{"dailyInfo": [], "nextPageToken": "token123"}',
             status=200,
@@ -104,10 +103,12 @@ class PollenTest(TestCase):
         )
 
         self.assertEqual(1, len(responses.calls))
-        body = json.loads(responses.calls[0].request.body)
-        self.assertEqual(body["days"], 3)
-        self.assertEqual(body["pageSize"], 10)
-        self.assertEqual(body["pageToken"], "prev_token")
+        url = responses.calls[0].request.url
+        self.assertIn("days=3", url)
+        self.assertIn("pageSize=10", url)
+        self.assertIn("pageToken=prev_token", url)
+        self.assertIn("languageCode=en", url)
+        self.assertIn("plantsDescription=False", url)
 
     @responses.activate
     def test_pollen_heatmap_tile(self):
@@ -185,10 +186,15 @@ class PollenExtractTest(TestCase):
 
         response = Mock()
         response.status_code = 403
-        response.json.return_value = {"error": {"message": "Quota exceeded"}}
+        response.json.return_value = {
+            "error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}
+        }
 
-        with self.assertRaises(exceptions._OverQueryLimit):
+        with self.assertRaises(exceptions._OverQueryLimit) as context:
             pollen._pollen_extract(response)
+
+        self.assertEqual(context.exception.status, "RESOURCE_EXHAUSTED")
+        self.assertEqual(context.exception.message, "Quota exceeded")
 
     def test_extract_api_error(self):
         """Test _pollen_extract with other API error."""
@@ -196,10 +202,15 @@ class PollenExtractTest(TestCase):
 
         response = Mock()
         response.status_code = 400
-        response.json.return_value = {"error": {"message": "Bad request"}}
+        response.json.return_value = {
+            "error": {"status": "INVALID_ARGUMENT", "message": "Bad request"}
+        }
 
-        with self.assertRaises(exceptions.ApiError):
+        with self.assertRaises(exceptions.ApiError) as context:
             pollen._pollen_extract(response)
+
+        self.assertEqual(context.exception.status, "INVALID_ARGUMENT")
+        self.assertEqual(context.exception.message, "Bad request")
 
     def test_extract_json_decode_error(self):
         """Test _pollen_extract with invalid JSON."""

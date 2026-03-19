@@ -35,7 +35,7 @@ class WeatherTest(TestCase):
     @responses.activate
     def test_current_weather(self):
         responses.add(
-            responses.POST,
+            responses.GET,
             "https://weather.googleapis.com/v1/currentConditions:lookup",
             body='{"location": {"latitude": 40.0, "longitude": -74.0}, "temperature": {"degrees": 20.0}}',
             status=200,
@@ -50,7 +50,7 @@ class WeatherTest(TestCase):
     @responses.activate
     def test_current_weather_with_all_params(self):
         responses.add(
-            responses.POST,
+            responses.GET,
             "https://weather.googleapis.com/v1/currentConditions:lookup",
             body='{"location": {"latitude": 40.0, "longitude": -74.0}}',
             status=200,
@@ -66,15 +66,14 @@ class WeatherTest(TestCase):
         )
 
         self.assertEqual(1, len(responses.calls))
-        body = json.loads(responses.calls[0].request.body)
-        self.assertEqual(body["weatherElements"], ["temperature", "humidity", "windSpeed"])
-        self.assertEqual(body["languageCode"], "en")
-        self.assertEqual(body["units"], "METRIC")
+        url = responses.calls[0].request.url
+        self.assertIn("languageCode=en", url)
+        self.assertIn("unitsSystem=METRIC", url)
 
     @responses.activate
     def test_current_weather_imperial_units(self):
         responses.add(
-            responses.POST,
+            responses.GET,
             "https://weather.googleapis.com/v1/currentConditions:lookup",
             body='{"location": {"latitude": 40.0, "longitude": -74.0}}',
             status=200,
@@ -84,15 +83,14 @@ class WeatherTest(TestCase):
         self.client.current_weather((40.0, -74.0), units="IMPERIAL")
 
         self.assertEqual(1, len(responses.calls))
-        body = json.loads(responses.calls[0].request.body)
-        self.assertEqual(body["units"], "IMPERIAL")
+        self.assertIn("unitsSystem=IMPERIAL", responses.calls[0].request.url)
 
     @responses.activate
     def test_weather_forecast(self):
         responses.add(
-            responses.POST,
-            "https://weather.googleapis.com/v1/forecast:lookup",
-            body='{"forecastHours": []}',
+            responses.GET,
+            "https://weather.googleapis.com/v1/forecast/days:lookup",
+            body='{"forecastDays": []}',
             status=200,
             content_type="application/json",
         )
@@ -105,15 +103,14 @@ class WeatherTest(TestCase):
         self.client.weather_forecast((40.0, -74.0), period=period)
 
         self.assertEqual(1, len(responses.calls))
-        body = json.loads(responses.calls[0].request.body)
-        self.assertEqual(body["period"]["startTime"], "2024-01-01T00:00:00Z")
+        self.assertIn("days=2", responses.calls[0].request.url)
 
     @responses.activate
     def test_weather_forecast_with_pagination(self):
         responses.add(
-            responses.POST,
-            "https://weather.googleapis.com/v1/forecast:lookup",
-            body='{"forecastHours": [], "nextPageToken": "token123"}',
+            responses.GET,
+            "https://weather.googleapis.com/v1/forecast/days:lookup",
+            body='{"forecastDays": [], "nextPageToken": "token123"}',
             status=200,
             content_type="application/json",
         )
@@ -126,14 +123,14 @@ class WeatherTest(TestCase):
         )
 
         self.assertEqual(1, len(responses.calls))
-        body = json.loads(responses.calls[0].request.body)
-        self.assertEqual(body["pageSize"], 24)
-        self.assertEqual(body["pageToken"], "prev_token")
+        url = responses.calls[0].request.url
+        self.assertIn("pageSize=24", url)
+        self.assertIn("pageToken=prev_token", url)
 
     @responses.activate
     def test_weather_hourly_forecast(self):
         responses.add(
-            responses.POST,
+            responses.GET,
             "https://weather.googleapis.com/v1/forecast/hours:lookup",
             body='{"hours": []}',
             status=200,
@@ -148,7 +145,7 @@ class WeatherTest(TestCase):
     @responses.activate
     def test_weather_hourly_forecast_with_params(self):
         responses.add(
-            responses.POST,
+            responses.GET,
             "https://weather.googleapis.com/v1/forecast/hours:lookup",
             body='{"hours": []}',
             status=200,
@@ -170,15 +167,17 @@ class WeatherTest(TestCase):
         )
 
         self.assertEqual(1, len(responses.calls))
-        body = json.loads(responses.calls[0].request.body)
-        self.assertEqual(body["weatherElements"], ["temperature", "windSpeed"])
-        self.assertEqual(body["period"]["startTime"], "2024-01-01T00:00:00Z")
+        url = responses.calls[0].request.url
+        self.assertIn("hours=12", url)
+        self.assertIn("languageCode=en", url)
+        self.assertIn("unitsSystem=METRIC", url)
+        self.assertIn("pageSize=12", url)
 
     @responses.activate
     def test_historical_weather(self):
         responses.add(
-            responses.POST,
-            "https://weather.googleapis.com/v1/history:lookup",
+            responses.GET,
+            "https://weather.googleapis.com/v1/history/hours:lookup",
             body='{"hours": []}',
             status=200,
             content_type="application/json",
@@ -192,14 +191,13 @@ class WeatherTest(TestCase):
         self.client.historical_weather((40.0, -74.0), period=period)
 
         self.assertEqual(1, len(responses.calls))
-        body = json.loads(responses.calls[0].request.body)
-        self.assertEqual(body["period"]["startTime"], "2023-12-01T00:00:00Z")
+        self.assertIn("hours=24", responses.calls[0].request.url)
 
     @responses.activate
     def test_historical_weather_with_all_params(self):
         responses.add(
-            responses.POST,
-            "https://weather.googleapis.com/v1/history:lookup",
+            responses.GET,
+            "https://weather.googleapis.com/v1/history/hours:lookup",
             body='{"hours": []}',
             status=200,
             content_type="application/json",
@@ -222,9 +220,12 @@ class WeatherTest(TestCase):
         )
 
         self.assertEqual(1, len(responses.calls))
-        body = json.loads(responses.calls[0].request.body)
-        self.assertEqual(body["weatherElements"], ["temperature"])
-        self.assertEqual(body["units"], "IMPERIAL")
+        url = responses.calls[0].request.url
+        self.assertIn("hours=24", url)
+        self.assertIn("unitsSystem=IMPERIAL", url)
+        self.assertIn("languageCode=en", url)
+        self.assertIn("pageSize=48", url)
+        self.assertIn("pageToken=token", url)
 
     def test_format_weather_location_tuple(self):
         result = weather._format_weather_location((40.0, -74.0))
@@ -265,10 +266,15 @@ class WeatherExtractTest(TestCase):
 
         response = Mock()
         response.status_code = 403
-        response.json.return_value = {"error": {"message": "Quota exceeded"}}
+        response.json.return_value = {
+            "error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}
+        }
 
-        with self.assertRaises(exceptions._OverQueryLimit):
+        with self.assertRaises(exceptions._OverQueryLimit) as context:
             weather._weather_extract(response)
+
+        self.assertEqual(context.exception.status, "RESOURCE_EXHAUSTED")
+        self.assertEqual(context.exception.message, "Quota exceeded")
 
     def test_extract_api_error(self):
         """Test _weather_extract with other API error."""
@@ -276,10 +282,15 @@ class WeatherExtractTest(TestCase):
 
         response = Mock()
         response.status_code = 400
-        response.json.return_value = {"error": {"message": "Bad request"}}
+        response.json.return_value = {
+            "error": {"status": "INVALID_ARGUMENT", "message": "Bad request"}
+        }
 
-        with self.assertRaises(exceptions.ApiError):
+        with self.assertRaises(exceptions.ApiError) as context:
             weather._weather_extract(response)
+
+        self.assertEqual(context.exception.status, "INVALID_ARGUMENT")
+        self.assertEqual(context.exception.message, "Bad request")
 
     def test_extract_json_decode_error(self):
         """Test _weather_extract with invalid JSON."""

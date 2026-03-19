@@ -282,6 +282,10 @@ class RoutesTest(TestCase):
         with self.assertRaises(ValueError):
             routes._format_waypoint(12345)
 
+    def test_format_waypoint_invalid_dict(self):
+        with self.assertRaises(ValueError):
+            routes._format_waypoint({"foo": "bar"})
+
     def test_format_time_string(self):
         result = routes._format_time("2024-01-15T08:00:00Z")
         self.assertEqual(result, "2024-01-15T08:00:00Z")
@@ -314,10 +318,15 @@ class RoutesExtractTest(TestCase):
 
         response = Mock()
         response.status_code = 403
-        response.json.return_value = {"error": {"message": "Quota exceeded"}}
+        response.json.return_value = {
+            "error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}
+        }
 
-        with self.assertRaises(exceptions._OverQueryLimit):
+        with self.assertRaises(exceptions._OverQueryLimit) as context:
             routes._routes_extract(response)
+
+        self.assertEqual(context.exception.status, "RESOURCE_EXHAUSTED")
+        self.assertEqual(context.exception.message, "Quota exceeded")
 
     def test_extract_api_error(self):
         """Test _routes_extract with other API error."""
@@ -325,10 +334,15 @@ class RoutesExtractTest(TestCase):
 
         response = Mock()
         response.status_code = 400
-        response.json.return_value = {"error": {"message": "Bad request"}}
+        response.json.return_value = {
+            "error": {"status": "INVALID_ARGUMENT", "message": "Bad request"}
+        }
 
-        with self.assertRaises(exceptions.ApiError):
+        with self.assertRaises(exceptions.ApiError) as context:
             routes._routes_extract(response)
+
+        self.assertEqual(context.exception.status, "INVALID_ARGUMENT")
+        self.assertEqual(context.exception.message, "Bad request")
 
     def test_extract_json_decode_error(self):
         """Test _routes_extract with invalid JSON."""
