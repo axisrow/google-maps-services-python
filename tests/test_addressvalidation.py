@@ -18,9 +18,12 @@
 
 """Tests for the addressvalidation module."""
 
+import json
+
 import responses
 
 import googlemaps
+from googlemaps import exceptions
 from . import TestCase
 
 
@@ -46,3 +49,14 @@ class AddressValidationTest(TestCase):
             "https://addressvalidation.googleapis.com/v1:validateAddress?" "key=%s" % self.key,
             responses.calls[0].request.url,
         )
+
+    def test_addressvalidation_json_decode_error(self):
+        """Test _addressvalidation_extract with invalid JSON."""
+        from unittest.mock import Mock
+        from googlemaps import addressvalidation
+
+        response = Mock()
+        response.json.side_effect = json.JSONDecodeError("msg", "doc", 0)
+
+        with self.assertRaises(exceptions.TransportError):
+            addressvalidation._addressvalidation_extract(response)

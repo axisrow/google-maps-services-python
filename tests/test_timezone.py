@@ -80,3 +80,25 @@ class TimezoneTest(TestCase):
             "&key=%s" % (1608, self.key),
             responses.calls[0].request.url,
         )
+
+    @responses.activate
+    def test_timezone_with_language(self):
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/timezone/json",
+            body='{"status":"OK"}',
+            status=200,
+            content_type="application/json",
+        )
+
+        ts = 1331766000
+        timezone = self.client.timezone((39.603481, -119.682251), ts, language="es")
+        self.assertIsNotNone(timezone)
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertURLEqual(
+            "https://maps.googleapis.com/maps/api/timezone/json"
+            "?location=39.603481,-119.682251&timestamp=%d"
+            "&language=es&key=%s" % (ts, self.key),
+            responses.calls[0].request.url,
+        )

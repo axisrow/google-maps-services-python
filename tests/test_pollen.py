@@ -24,13 +24,12 @@ import responses
 import googlemaps
 from googlemaps import pollen
 from googlemaps import exceptions
+from . import GoogleMapsClientTestCase
+from . import JsonApiExtractTestCase
 from . import TestCase
 
 
-class PollenTest(TestCase):
-    def setUp(self):
-        self.key = "AIzaasdf"
-        self.client = googlemaps.Client(self.key)
+class PollenTest(GoogleMapsClientTestCase):
 
     @responses.activate
     def test_current_pollen(self):
@@ -168,33 +167,46 @@ class PollenTest(TestCase):
             pollen._format_pollen_location("invalid")
 
 
-class PollenExtractTest(TestCase):
+class PollenExtractTest(JsonApiExtractTestCase):
     def test_extract_success(self):
-        """Test _pollen_extract with successful response."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 200
-        response.json.return_value = {"pollenTypeInfo": []}
-
+        response = self.make_json_response(body={"pollenTypeInfo": []})
         result = pollen._pollen_extract(response)
         self.assertIn("pollenTypeInfo", result)
 
+    def test_extract_http_error(self):
+        self.assertApiHttpError(pollen._pollen_extract, body={})
+
+    def test_extract_api_error_not_found(self):
+        self.assertApiErrorStatus(
+            pollen._pollen_extract,
+            error_status="NOT_FOUND",
+            message=None,
+            status_code=404,
+        )
+
+    def test_current_pollen_empty_daily_info(self):
+        response = self.make_json_response(body={})
+        result = pollen._current_pollen_extract(response)
+        self.assertEqual(result, {})
+
+
+class PollenHeatmapTileTest(GoogleMapsClientTestCase, JsonApiExtractTestCase):
+
+    def test_pollen_heatmap_tile_transport_error(self):
+        """Test pollen_heatmap_tile with transport error."""
+        from unittest.mock import patch
+
+        with patch.object(self.client.session, 'get') as mock_get:
+            mock_get.side_effect = Exception("Network error")
+
+            with self.assertRaises(googlemaps.exceptions.TransportError):
+                self.client.pollen_heatmap_tile("TREE_UPI", 10, 20, 30)
+
+    def test_pollen_extract_transport_error(self):
+        self.assertApiTransportError(pollen._pollen_extract)
+
     def test_extract_403_over_query_limit(self):
-        """Test _pollen_extract with 403 status (OverQueryLimit)."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 403
-        response.json.return_value = {
-            "error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}
-        }
-
-        with self.assertRaises(exceptions._OverQueryLimit) as context:
-            pollen._pollen_extract(response)
-
-        self.assertEqual(context.exception.status, "RESOURCE_EXHAUSTED")
-        self.assertEqual(context.exception.message, "Quota exceeded")
+        self.assertApiOverQueryLimit(pollen._pollen_extract)
 
     def test_extract_api_error(self):
         """Test _pollen_extract with other API error."""

@@ -24,13 +24,12 @@ import responses
 import googlemaps
 from googlemaps import solar
 from googlemaps import exceptions
+from . import GoogleMapsClientTestCase
+from . import JsonApiExtractTestCase
 from . import TestCase
 
 
-class SolarTest(TestCase):
-    def setUp(self):
-        self.key = "AIzaasdf"
-        self.client = googlemaps.Client(self.key)
+class SolarTest(GoogleMapsClientTestCase):
 
     @responses.activate
     def test_building_insights(self):
@@ -173,57 +172,40 @@ class SolarTest(TestCase):
             solar._format_solar_location("invalid")
 
 
-class SolarExtractTest(TestCase):
+class SolarExtractTest(JsonApiExtractTestCase):
     def test_extract_success(self):
-        """Test _solar_extract with successful response."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 200
-        response.json.return_value = {"solarPotential": {}}
-
+        response = self.make_json_response(body={"solarPotential": {}})
         result = solar._solar_extract(response)
         self.assertIn("solarPotential", result)
 
+    def test_extract_http_error(self):
+        self.assertApiHttpError(solar._solar_extract, body={"solarPotential": {}})
+
     def test_extract_403_over_query_limit(self):
-        """Test _solar_extract with 403 status (OverQueryLimit)."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 403
-        response.json.return_value = {
-            "error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}
-        }
-
-        with self.assertRaises(exceptions._OverQueryLimit) as context:
-            solar._solar_extract(response)
-
-        self.assertEqual(context.exception.status, "RESOURCE_EXHAUSTED")
-        self.assertEqual(context.exception.message, "Quota exceeded")
+        self.assertApiOverQueryLimit(solar._solar_extract)
 
     def test_extract_api_error(self):
-        """Test _solar_extract with other API error."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 400
-        response.json.return_value = {
-            "error": {"status": "INVALID_ARGUMENT", "message": "Bad request"}
-        }
-
-        with self.assertRaises(exceptions.ApiError) as context:
-            solar._solar_extract(response)
-
-        self.assertEqual(context.exception.status, "INVALID_ARGUMENT")
-        self.assertEqual(context.exception.message, "Bad request")
+        self.assertApiErrorStatus(solar._solar_extract)
 
     def test_extract_json_decode_error(self):
-        """Test _solar_extract with invalid JSON."""
-        from unittest.mock import Mock
+        self.assertApiTransportError(solar._solar_extract)
 
-        response = Mock()
-        response.status_code = 200
-        response.json.side_effect = json.JSONDecodeError("msg", "doc", 0)
 
-        with self.assertRaises(exceptions.TransportError):
-            solar._solar_extract(response)
+class SolarUtilityTest(GoogleMapsClientTestCase):
+
+    def test_extract_geotiff_id_without_url(self):
+        """Test _extract_geotiff_id with a simple id (no ://)."""
+        result = solar._extract_geotiff_id("simple-id-123")
+        self.assertEqual(result, "simple-id-123")
+
+    @responses.activate
+    def test_geo_tiff_transport_error(self):
+        """Test geo_tiff with a transport error."""
+        responses.add(
+            responses.GET,
+            "https://solar.googleapis.com/v1/geoTiff:get",
+            body=Exception("Network error"),
+        )
+
+        with self.assertRaises(googlemaps.exceptions.TransportError):
+            self.client.geo_tiff("https://solar.googleapis.com/v1/geoTiff:get?id=test-asset")

@@ -88,9 +88,22 @@ class ElevationTest(TestCase):
             responses.calls[0].request.url,
         )
 
+    @responses.activate
     def test_elevation_along_path_single(self):
-        with self.assertRaises(googlemaps.exceptions.ApiError):
-            results = self.client.elevation_along_path([(40.714728, -73.998672)], 5)
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/elevation/json",
+            body='{"status":"INVALID_REQUEST","error_message":"Path must contain at least two points."}',
+            status=200,
+            content_type="application/json",
+        )
+
+        with self.assertRaises(googlemaps.exceptions.ApiError) as context:
+            self.client.elevation_along_path([(40.714728, -73.998672)], 5)
+
+        self.assertEqual("INVALID_REQUEST", context.exception.status)
+        self.assertEqual(1, len(responses.calls))
+        self.assertIn("samples=5", responses.calls[0].request.url)
 
     @responses.activate
     def test_elevation_along_path(self):
@@ -132,3 +145,21 @@ class ElevationTest(TestCase):
             "locations=40,-73&key=%s" % self.key,
             responses.calls[0].request.url,
         )
+
+    @responses.activate
+    def test_elevation_along_path_with_encoded_string(self):
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/elevation/json",
+            body='{"status":"OK","results":[]}',
+            status=200,
+            content_type="application/json",
+        )
+
+        # Test with encoded polyline string (string that doesn't look like a coordinate tuple)
+        encoded_polyline = "a~l~Fjk~uOwHJy@P"
+        results = self.client.elevation_along_path(encoded_polyline, 5)
+
+        self.assertEqual(1, len(responses.calls))
+        # When path is a string, it should be prefixed with "enc:"
+        self.assertIn("path=enc%3A", responses.calls[0].request.url)

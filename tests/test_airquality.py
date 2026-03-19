@@ -25,13 +25,12 @@ import responses
 import googlemaps
 from googlemaps import airquality
 from googlemaps import exceptions
+from . import GoogleMapsClientTestCase
+from . import JsonApiExtractTestCase
 from . import TestCase
 
 
-class AirQualityTest(TestCase):
-    def setUp(self):
-        self.key = "AIzaasdf"
-        self.client = googlemaps.Client(self.key)
+class AirQualityTest(GoogleMapsClientTestCase):
 
     @responses.activate
     def test_current_air_quality(self):
@@ -218,60 +217,31 @@ class AirQualityTest(TestCase):
             airquality._format_location("invalid")
 
 
-class AirQualityExtractTest(TestCase):
+class AirQualityExtractTest(JsonApiExtractTestCase):
     def test_extract_success(self):
-        """Test _airquality_extract with successful response."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 200
-        response.json.return_value = {"index": {"code": "uaqi"}}
-
+        response = self.make_json_response(body={"index": {"code": "uaqi"}})
         result = airquality._airquality_extract(response)
         self.assertEqual(result["index"]["code"], "uaqi")
 
     def test_extract_403_over_query_limit(self):
-        """Test _airquality_extract with 403 status (OverQueryLimit)."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 403
-        response.json.return_value = {
-            "error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}
-        }
-
-        with self.assertRaises(exceptions._OverQueryLimit) as context:
-            airquality._airquality_extract(response)
-
-        self.assertEqual(context.exception.status, "RESOURCE_EXHAUSTED")
-        self.assertEqual(context.exception.message, "Quota exceeded")
+        self.assertApiOverQueryLimit(airquality._airquality_extract)
 
     def test_extract_api_error(self):
-        """Test _airquality_extract with other API error."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 400
-        response.json.return_value = {
-            "error": {"status": "INVALID_ARGUMENT", "message": "Bad request"}
-        }
-
-        with self.assertRaises(exceptions.ApiError) as context:
-            airquality._airquality_extract(response)
-
-        self.assertEqual(context.exception.status, "INVALID_ARGUMENT")
-        self.assertEqual(context.exception.message, "Bad request")
+        self.assertApiErrorStatus(airquality._airquality_extract)
 
     def test_extract_json_decode_error(self):
-        """Test _airquality_extract with invalid JSON."""
-        from unittest.mock import Mock
-        import json
+        self.assertApiTransportError(airquality._airquality_extract)
 
-        response = Mock()
-        response.status_code = 200
-        response.json.side_effect = json.JSONDecodeError("msg", "doc", 0)
+    def test_extract_http_error(self):
+        self.assertApiHttpError(airquality._airquality_extract, body={"index": {}})
 
-        with self.assertRaises(exceptions.TransportError):
+    def test_extract_transport_error(self):
+        response = self.make_json_response(
+            status_code=200,
+            json_side_effect=json.JSONDecodeError("Invalid JSON", "doc", 0),
+        )
+
+        with self.assertRaises(googlemaps.exceptions.TransportError):
             airquality._airquality_extract(response)
 
 
@@ -284,3 +254,272 @@ class AirQualityFormatTimeTest(TestCase):
         dt = datetime(2024, 1, 1, 12, 30, 45)
         result = airquality._format_time(dt)
         self.assertEqual(result, "2024-01-01T12:30:45Z")
+
+    def test_format_time_non_datetime(self):
+        """Test _format_time with value that's not a datetime or string."""
+        result = airquality._format_time(123456)
+        self.assertEqual(result, 123456)
+
+
+class AirQualityParamsTest(GoogleMapsClientTestCase):
+
+    @responses.activate
+    def test_air_quality_forecast_with_extra_computations(self):
+        responses.add(
+            responses.POST,
+            "https://airquality.googleapis.com/v1/forecast:lookup",
+            body='{"hourlyForecasts": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        period = {
+            "startTime": "2024-01-01T00:00:00Z",
+            "endTime": "2024-01-02T00:00:00Z"
+        }
+
+        self.client.air_quality_forecast(
+            (40.0, -74.0),
+            period=period,
+            extra_computations=["HEALTH_RECOMMENDATIONS", "DOMINANT_POLLUTANT_CONCENTRATION"]
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["extraComputations"], ["HEALTH_RECOMMENDATIONS", "DOMINANT_POLLUTANT_CONCENTRATION"])
+
+    @responses.activate
+    def test_air_quality_forecast_with_language_code(self):
+        responses.add(
+            responses.POST,
+            "https://airquality.googleapis.com/v1/forecast:lookup",
+            body='{"hourlyForecasts": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        period = {
+            "startTime": "2024-01-01T00:00:00Z",
+            "endTime": "2024-01-02T00:00:00Z"
+        }
+
+        self.client.air_quality_forecast(
+            (40.0, -74.0),
+            period=period,
+            language_code="en"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["languageCode"], "en")
+
+    @responses.activate
+    def test_air_quality_forecast_with_universal_aqi(self):
+        responses.add(
+            responses.POST,
+            "https://airquality.googleapis.com/v1/forecast:lookup",
+            body='{"hourlyForecasts": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        period = {
+            "startTime": "2024-01-01T00:00:00Z",
+            "endTime": "2024-01-02T00:00:00Z"
+        }
+
+        self.client.air_quality_forecast(
+            (40.0, -74.0),
+            period=period,
+            universal_aqi=True
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertTrue(body["universalAqi"])
+
+    @responses.activate
+    def test_air_quality_forecast_with_aqi_scale(self):
+        responses.add(
+            responses.POST,
+            "https://airquality.googleapis.com/v1/forecast:lookup",
+            body='{"hourlyForecasts": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        period = {
+            "startTime": "2024-01-01T00:00:00Z",
+            "endTime": "2024-01-02T00:00:00Z"
+        }
+
+        self.client.air_quality_forecast(
+            (40.0, -74.0),
+            period=period,
+            aqi_scale="UAQI_IN_AQI"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["uaqiColorPalette"], "UAQI_IN_AQI")
+
+    @responses.activate
+    def test_historical_air_quality_with_extra_computations(self):
+        responses.add(
+            responses.POST,
+            "https://airquality.googleapis.com/v1/history:lookup",
+            body='{"hours": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        period = {
+            "startTime": "2024-01-01T00:00:00Z",
+            "endTime": "2024-01-02T00:00:00Z"
+        }
+
+        self.client.historical_air_quality(
+            (40.0, -74.0),
+            period=period,
+            extra_computations=["HEALTH_RECOMMENDATIONS"]
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["extraComputations"], ["HEALTH_RECOMMENDATIONS"])
+
+    @responses.activate
+    def test_historical_air_quality_with_language_code(self):
+        responses.add(
+            responses.POST,
+            "https://airquality.googleapis.com/v1/history:lookup",
+            body='{"hours": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        period = {
+            "startTime": "2024-01-01T00:00:00Z",
+            "endTime": "2024-01-02T00:00:00Z"
+        }
+
+        self.client.historical_air_quality(
+            (40.0, -74.0),
+            period=period,
+            language_code="es"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["languageCode"], "es")
+
+    @responses.activate
+    def test_historical_air_quality_with_universal_aqi(self):
+        responses.add(
+            responses.POST,
+            "https://airquality.googleapis.com/v1/history:lookup",
+            body='{"hours": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        period = {
+            "startTime": "2024-01-01T00:00:00Z",
+            "endTime": "2024-01-02T00:00:00Z"
+        }
+
+        self.client.historical_air_quality(
+            (40.0, -74.0),
+            period=period,
+            universal_aqi=True
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertTrue(body["universalAqi"])
+
+    @responses.activate
+    def test_historical_air_quality_with_page_size(self):
+        responses.add(
+            responses.POST,
+            "https://airquality.googleapis.com/v1/history:lookup",
+            body='{"hours": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        period = {
+            "startTime": "2024-01-01T00:00:00Z",
+            "endTime": "2024-01-02T00:00:00Z"
+        }
+
+        self.client.historical_air_quality(
+            (40.0, -74.0),
+            period=period,
+            page_size=24
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["pageSize"], 24)
+
+    @responses.activate
+    def test_historical_air_quality_with_page_token(self):
+        responses.add(
+            responses.POST,
+            "https://airquality.googleapis.com/v1/history:lookup",
+            body='{"hours": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        period = {
+            "startTime": "2024-01-01T00:00:00Z",
+            "endTime": "2024-01-02T00:00:00Z"
+        }
+
+        self.client.historical_air_quality(
+            (40.0, -74.0),
+            period=period,
+            page_token="next_page_token"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["pageToken"], "next_page_token")
+
+    @responses.activate
+    def test_historical_air_quality_with_aqi_scale(self):
+        responses.add(
+            responses.POST,
+            "https://airquality.googleapis.com/v1/history:lookup",
+            body='{"hours": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        period = {
+            "startTime": "2024-01-01T00:00:00Z",
+            "endTime": "2024-01-02T00:00:00Z"
+        }
+
+        self.client.historical_air_quality(
+            (40.0, -74.0),
+            period=period,
+            aqi_scale="US_AQI"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["uaqiColorPalette"], "US_AQI")
+
+    @responses.activate
+    def test_air_quality_heatmap_tile_transport_error(self):
+        """Test air_quality_heatmap_tile with transport error."""
+        from unittest.mock import patch, Mock
+
+        with patch.object(self.client.session, 'get') as mock_get:
+            mock_get.side_effect = Exception("Network error")
+
+            with self.assertRaises(googlemaps.exceptions.TransportError):
+                self.client.air_quality_heatmap_tile("US_AQI", 10, 20, 30)
