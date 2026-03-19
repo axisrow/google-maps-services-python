@@ -80,13 +80,26 @@ class DirectionsTest(TestCase):
             responses.calls[0].request.url,
         )
 
+    @responses.activate
     def test_transit_without_time(self):
-        # With mode of transit, we need a departure_time or an
-        # arrival_time specified
-        with self.assertRaises(googlemaps.exceptions.ApiError):
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/directions/json",
+            body='{"status":"INVALID_REQUEST","error_message":"Departure or arrival time is required for transit directions."}',
+            status=200,
+            content_type="application/json",
+        )
+
+        # With mode of transit, the API should reject requests without
+        # departure_time or arrival_time.
+        with self.assertRaises(googlemaps.exceptions.ApiError) as context:
             self.client.directions(
                 "Sydney Town Hall", "Parramatta, NSW", mode="transit"
             )
+
+        self.assertEqual("INVALID_REQUEST", context.exception.status)
+        self.assertEqual(1, len(responses.calls))
+        self.assertIn("mode=transit", responses.calls[0].request.url)
 
     @responses.activate
     def test_transit_with_departure_time(self):
