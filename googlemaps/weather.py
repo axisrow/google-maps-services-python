@@ -17,10 +17,10 @@
 
 """Performs requests to the Google Maps Weather API."""
 
-import json
 from datetime import datetime
 
-from googlemaps import exceptions
+from googlemaps._api import extract_api_body
+from googlemaps._api import format_lat_lng
 
 
 _WEATHER_BASE_URL = "https://weather.googleapis.com"
@@ -31,25 +31,7 @@ def _weather_extract(response):
     Mimics the exception handling logic in ``client._get_body``, but
     for Weather API which uses a different response format.
     """
-    try:
-        body = response.json()
-    except json.JSONDecodeError:
-        raise exceptions.TransportError("Invalid JSON response from API")
-
-    if "error" in body:
-        error = body["error"]
-        status = error.get("status", response.status_code)
-        message = error.get("message")
-
-        if response.status_code == 403 or status == "RESOURCE_EXHAUSTED":
-            raise exceptions._OverQueryLimit(status, message)
-
-        raise exceptions.ApiError(status, message)
-
-    if response.status_code != 200:
-        raise exceptions.HTTPError(response.status_code)
-
-    return body
+    return extract_api_body(response)
 
 
 def _format_weather_location(location):
@@ -61,14 +43,7 @@ def _format_weather_location(location):
 
     :rtype: dict
     """
-    if isinstance(location, (tuple, list)):
-        return {"latitude": location[0], "longitude": location[1]}
-    elif isinstance(location, dict):
-        if "latitude" in location and "longitude" in location:
-            return location
-        elif "lat" in location and "lng" in location:
-            return {"latitude": location["lat"], "longitude": location["lng"]}
-    raise ValueError("Invalid location format: %s" % location)
+    return format_lat_lng(location)
 
 
 def _parse_time(time_value):

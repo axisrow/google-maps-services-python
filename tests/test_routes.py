@@ -24,14 +24,12 @@ import responses
 
 import googlemaps
 from googlemaps import routes
-from googlemaps import exceptions
+from . import GoogleMapsClientTestCase
+from . import JsonApiExtractTestCase
 from . import TestCase
 
 
-class RoutesTest(TestCase):
-    def setUp(self):
-        self.key = "AIzaasdf"
-        self.client = googlemaps.Client(self.key)
+class RoutesTest(GoogleMapsClientTestCase):
 
     @responses.activate
     def test_compute_routes_basic(self):
@@ -300,71 +298,23 @@ class RoutesTest(TestCase):
             routes._format_time(None)
 
 
-class RoutesExtractTest(TestCase):
+class RoutesExtractTest(JsonApiExtractTestCase):
     def test_extract_success(self):
-        """Test _routes_extract with successful response."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 200
-        response.json.return_value = {"routes": []}
-
+        response = self.make_json_response(body={"routes": []})
         result = routes._routes_extract(response)
         self.assertIn("routes", result)
 
     def test_extract_http_error(self):
-        """Test _routes_extract with HTTP error status (not 200)."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 500
-        response.json.return_value = {"routes": []}
-
-        with self.assertRaises(exceptions.HTTPError):
-            routes._routes_extract(response)
+        self.assertApiHttpError(routes._routes_extract, body={"routes": []})
 
     def test_extract_403_over_query_limit(self):
-        """Test _routes_extract with 403 status (OverQueryLimit)."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 403
-        response.json.return_value = {
-            "error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}
-        }
-
-        with self.assertRaises(exceptions._OverQueryLimit) as context:
-            routes._routes_extract(response)
-
-        self.assertEqual(context.exception.status, "RESOURCE_EXHAUSTED")
-        self.assertEqual(context.exception.message, "Quota exceeded")
+        self.assertApiOverQueryLimit(routes._routes_extract)
 
     def test_extract_api_error(self):
-        """Test _routes_extract with other API error."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 400
-        response.json.return_value = {
-            "error": {"status": "INVALID_ARGUMENT", "message": "Bad request"}
-        }
-
-        with self.assertRaises(exceptions.ApiError) as context:
-            routes._routes_extract(response)
-
-        self.assertEqual(context.exception.status, "INVALID_ARGUMENT")
-        self.assertEqual(context.exception.message, "Bad request")
+        self.assertApiErrorStatus(routes._routes_extract)
 
     def test_extract_json_decode_error(self):
-        """Test _routes_extract with invalid JSON."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 200
-        response.json.side_effect = json.JSONDecodeError("msg", "doc", 0)
-
-        with self.assertRaises(exceptions.TransportError):
-            routes._routes_extract(response)
+        self.assertApiTransportError(routes._routes_extract)
 
 
 class RoutesFormattingTest(TestCase):
@@ -374,10 +324,7 @@ class RoutesFormattingTest(TestCase):
             routes._format_waypoint((40.7128, -74.0060, 0))  # 3-element tuple
 
 
-class RoutesParamsTest(TestCase):
-    def setUp(self):
-        self.key = "AIzaasdf"
-        self.client = googlemaps.Client(self.key)
+class RoutesParamsTest(GoogleMapsClientTestCase):
 
     @responses.activate
     def test_compute_routes_with_arrival_time(self):

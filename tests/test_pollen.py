@@ -24,13 +24,12 @@ import responses
 import googlemaps
 from googlemaps import pollen
 from googlemaps import exceptions
+from . import GoogleMapsClientTestCase
+from . import JsonApiExtractTestCase
 from . import TestCase
 
 
-class PollenTest(TestCase):
-    def setUp(self):
-        self.key = "AIzaasdf"
-        self.client = googlemaps.Client(self.key)
+class PollenTest(GoogleMapsClientTestCase):
 
     @responses.activate
     def test_current_pollen(self):
@@ -168,58 +167,30 @@ class PollenTest(TestCase):
             pollen._format_pollen_location("invalid")
 
 
-class PollenExtractTest(TestCase):
+class PollenExtractTest(JsonApiExtractTestCase):
     def test_extract_success(self):
-        """Test _pollen_extract with successful response."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 200
-        response.json.return_value = {"pollenTypeInfo": []}
-
+        response = self.make_json_response(body={"pollenTypeInfo": []})
         result = pollen._pollen_extract(response)
         self.assertIn("pollenTypeInfo", result)
 
     def test_extract_http_error(self):
-        """Test _pollen_extract with HTTP error status (not 200) and no error in body."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 500
-        response.json.return_value = {}  # No error field, just empty body
-
-        with self.assertRaises(exceptions.HTTPError):
-            pollen._pollen_extract(response)
+        self.assertApiHttpError(pollen._pollen_extract, body={})
 
     def test_extract_api_error_not_found(self):
-        """Test _pollen_extract with NOT_FOUND API error."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 404
-        response.json.return_value = {"error": {"status": "NOT_FOUND"}}
-
-        with self.assertRaises(exceptions.ApiError) as context:
-            pollen._pollen_extract(response)
-
-        self.assertEqual(context.exception.status, "NOT_FOUND")
+        self.assertApiErrorStatus(
+            pollen._pollen_extract,
+            error_status="NOT_FOUND",
+            message=None,
+            status_code=404,
+        )
 
     def test_current_pollen_empty_daily_info(self):
-        """Test _pollen_extract with empty dailyInfo."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 200
-        response.json.return_value = {}  # Empty response, no dailyInfo
-
-        result = pollen._pollen_extract(response)
+        response = self.make_json_response(body={})
+        result = pollen._current_pollen_extract(response)
         self.assertEqual(result, {})
 
 
-class PollenHeatmapTileTest(TestCase):
-    def setUp(self):
-        self.key = "AIzaasdf"
-        self.client = googlemaps.Client(self.key)
+class PollenHeatmapTileTest(GoogleMapsClientTestCase, JsonApiExtractTestCase):
 
     def test_pollen_heatmap_tile_transport_error(self):
         """Test pollen_heatmap_tile with transport error."""
@@ -231,34 +202,11 @@ class PollenHeatmapTileTest(TestCase):
             with self.assertRaises(googlemaps.exceptions.TransportError):
                 self.client.pollen_heatmap_tile("TREE_UPI", 10, 20, 30)
 
-    def test_pollen_heatmap_tile_transport_error(self):
-        """Test pollen_heatmap_tile with TransportError."""
-        from unittest.mock import Mock
-        import googlemaps.pollen as pollen_module
-
-        # Test the internal extract function with transport error
-        response = Mock()
-        response.status_code = 200
-        response.json.side_effect = json.JSONDecodeError("msg", "doc", 0)
-
-        with self.assertRaises(exceptions.TransportError):
-            pollen_module._pollen_extract(response)
+    def test_pollen_extract_transport_error(self):
+        self.assertApiTransportError(pollen._pollen_extract)
 
     def test_extract_403_over_query_limit(self):
-        """Test _pollen_extract with 403 status (OverQueryLimit)."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 403
-        response.json.return_value = {
-            "error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}
-        }
-
-        with self.assertRaises(exceptions._OverQueryLimit) as context:
-            pollen._pollen_extract(response)
-
-        self.assertEqual(context.exception.status, "RESOURCE_EXHAUSTED")
-        self.assertEqual(context.exception.message, "Quota exceeded")
+        self.assertApiOverQueryLimit(pollen._pollen_extract)
 
     def test_extract_api_error(self):
         """Test _pollen_extract with other API error."""

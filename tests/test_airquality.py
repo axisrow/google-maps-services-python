@@ -25,13 +25,12 @@ import responses
 import googlemaps
 from googlemaps import airquality
 from googlemaps import exceptions
+from . import GoogleMapsClientTestCase
+from . import JsonApiExtractTestCase
 from . import TestCase
 
 
-class AirQualityTest(TestCase):
-    def setUp(self):
-        self.key = "AIzaasdf"
-        self.client = googlemaps.Client(self.key)
+class AirQualityTest(GoogleMapsClientTestCase):
 
     @responses.activate
     def test_current_air_quality(self):
@@ -218,60 +217,31 @@ class AirQualityTest(TestCase):
             airquality._format_location("invalid")
 
 
-class AirQualityExtractTest(TestCase):
+class AirQualityExtractTest(JsonApiExtractTestCase):
     def test_extract_success(self):
-        """Test _airquality_extract with successful response."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 200
-        response.json.return_value = {"index": {"code": "uaqi"}}
-
+        response = self.make_json_response(body={"index": {"code": "uaqi"}})
         result = airquality._airquality_extract(response)
         self.assertEqual(result["index"]["code"], "uaqi")
 
     def test_extract_403_over_query_limit(self):
-        """Test _airquality_extract with 403 status (OverQueryLimit)."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 403
-        response.json.return_value = {
-            "error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}
-        }
-
-        with self.assertRaises(exceptions._OverQueryLimit) as context:
-            airquality._airquality_extract(response)
-
-        self.assertEqual(context.exception.status, "RESOURCE_EXHAUSTED")
-        self.assertEqual(context.exception.message, "Quota exceeded")
+        self.assertApiOverQueryLimit(airquality._airquality_extract)
 
     def test_extract_api_error(self):
-        """Test _airquality_extract with other API error."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 400
-        response.json.return_value = {
-            "error": {"status": "INVALID_ARGUMENT", "message": "Bad request"}
-        }
-
-        with self.assertRaises(exceptions.ApiError) as context:
-            airquality._airquality_extract(response)
-
-        self.assertEqual(context.exception.status, "INVALID_ARGUMENT")
-        self.assertEqual(context.exception.message, "Bad request")
+        self.assertApiErrorStatus(airquality._airquality_extract)
 
     def test_extract_json_decode_error(self):
-        """Test _airquality_extract with invalid JSON."""
-        from unittest.mock import Mock
-        import json
+        self.assertApiTransportError(airquality._airquality_extract)
 
-        response = Mock()
-        response.status_code = 200
-        response.json.side_effect = json.JSONDecodeError("msg", "doc", 0)
+    def test_extract_http_error(self):
+        self.assertApiHttpError(airquality._airquality_extract, body={"index": {}})
 
-        with self.assertRaises(exceptions.TransportError):
+    def test_extract_transport_error(self):
+        response = self.make_json_response(
+            status_code=200,
+            json_side_effect=json.JSONDecodeError("Invalid JSON", "doc", 0),
+        )
+
+        with self.assertRaises(googlemaps.exceptions.TransportError):
             airquality._airquality_extract(response)
 
 
@@ -291,34 +261,7 @@ class AirQualityFormatTimeTest(TestCase):
         self.assertEqual(result, 123456)
 
 
-class AirQualityExtractTest(TestCase):
-    def test_extract_http_error(self):
-        """Test _airquality_extract with HTTP error (non-200 status)."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 500
-        response.json.return_value = {"index": {}}
-
-        with self.assertRaises(exceptions.HTTPError):
-            airquality._airquality_extract(response)
-
-    def test_extract_transport_error(self):
-        """Test _airquality_extract with TransportError (from json decode error)."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 200
-        response.json.side_effect = json.JSONDecodeError("Invalid JSON", "doc", 0)
-
-        with self.assertRaises(exceptions.TransportError):
-            airquality._airquality_extract(response)
-
-
-class AirQualityParamsTest(TestCase):
-    def setUp(self):
-        self.key = "AIzaasdf"
-        self.client = googlemaps.Client(self.key)
+class AirQualityParamsTest(GoogleMapsClientTestCase):
 
     @responses.activate
     def test_air_quality_forecast_with_extra_computations(self):

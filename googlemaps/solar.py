@@ -17,11 +17,13 @@
 
 """Performs requests to the Google Maps Solar API."""
 
-import json
 from urllib.parse import parse_qs
 from urllib.parse import urlparse
 
 from googlemaps import exceptions
+from googlemaps._api import extract_api_body
+from googlemaps._api import format_lat_lng
+from googlemaps._api import request_binary_content
 
 
 _SOLAR_BASE_URL = "https://solar.googleapis.com"
@@ -35,25 +37,7 @@ def _solar_extract(response):
     Mimics the exception handling logic in ``client._get_body``, but
     for Solar API which uses a different response format.
     """
-    try:
-        body = response.json()
-    except json.JSONDecodeError:
-        raise exceptions.TransportError("Invalid JSON response from API")
-
-    if "error" in body:
-        error = body["error"]
-        status = error.get("status", response.status_code)
-        message = error.get("message")
-
-        if response.status_code == 403 or status == "RESOURCE_EXHAUSTED":
-            raise exceptions._OverQueryLimit(status, message)
-
-        raise exceptions.ApiError(status, message)
-
-    if response.status_code != 200:
-        raise exceptions.HTTPError(response.status_code)
-
-    return body
+    return extract_api_body(response)
 
 
 def _extract_geotiff_id(asset):
@@ -89,14 +73,7 @@ def _format_solar_location(location):
 
     :rtype: dict
     """
-    if isinstance(location, (tuple, list)):
-        return {"latitude": location[0], "longitude": location[1]}
-    elif isinstance(location, dict):
-        if "latitude" in location and "longitude" in location:
-            return location
-        elif "lat" in location and "lng" in location:
-            return {"latitude": location["lat"], "longitude": location["lng"]}
-    raise ValueError("Invalid location format: %s" % location)
+    return format_lat_lng(location)
 
 
 def building_insights(client, location, required_quality=None):
@@ -207,13 +184,4 @@ def geo_tiff(client, url):
         {"id": geotiff_id},
         accepts_clientid=False,
     )
-    timeout = client.timeout if client.timeout is not None else 30
-    try:
-        response = client.session.get(_SOLAR_BASE_URL + authed_url, timeout=timeout)
-    except Exception as e:
-        raise exceptions.TransportError(e)
-
-    if response.status_code != 200:
-        raise exceptions.HTTPError(response.status_code)
-
-    return response.content
+    return request_binary_content(client, _SOLAR_BASE_URL + authed_url)

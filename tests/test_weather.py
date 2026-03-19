@@ -24,14 +24,12 @@ import responses
 
 import googlemaps
 from googlemaps import weather
-from googlemaps import exceptions
+from . import GoogleMapsClientTestCase
+from . import JsonApiExtractTestCase
 from . import TestCase
 
 
-class WeatherTest(TestCase):
-    def setUp(self):
-        self.key = "AIzaasdf"
-        self.client = googlemaps.Client(self.key)
+class WeatherTest(GoogleMapsClientTestCase):
 
     @responses.activate
     def test_current_weather(self):
@@ -249,71 +247,23 @@ class WeatherTest(TestCase):
             weather._format_weather_location("invalid")
 
 
-class WeatherExtractTest(TestCase):
+class WeatherExtractTest(JsonApiExtractTestCase):
     def test_extract_success(self):
-        """Test _weather_extract with successful response."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 200
-        response.json.return_value = {"temperature": {"degrees": 20.0}}
-
+        response = self.make_json_response(body={"temperature": {"degrees": 20.0}})
         result = weather._weather_extract(response)
         self.assertIn("temperature", result)
 
     def test_extract_http_error(self):
-        """Test _weather_extract with HTTP error status (not 200)."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 500
-        response.json.return_value = {"temperature": {}}
-
-        with self.assertRaises(exceptions.HTTPError):
-            weather._weather_extract(response)
+        self.assertApiHttpError(weather._weather_extract, body={"temperature": {}})
 
     def test_extract_403_over_query_limit(self):
-        """Test _weather_extract with 403 status (OverQueryLimit)."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 403
-        response.json.return_value = {
-            "error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}
-        }
-
-        with self.assertRaises(exceptions._OverQueryLimit) as context:
-            weather._weather_extract(response)
-
-        self.assertEqual(context.exception.status, "RESOURCE_EXHAUSTED")
-        self.assertEqual(context.exception.message, "Quota exceeded")
+        self.assertApiOverQueryLimit(weather._weather_extract)
 
     def test_extract_api_error(self):
-        """Test _weather_extract with other API error."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 400
-        response.json.return_value = {
-            "error": {"status": "INVALID_ARGUMENT", "message": "Bad request"}
-        }
-
-        with self.assertRaises(exceptions.ApiError) as context:
-            weather._weather_extract(response)
-
-        self.assertEqual(context.exception.status, "INVALID_ARGUMENT")
-        self.assertEqual(context.exception.message, "Bad request")
+        self.assertApiErrorStatus(weather._weather_extract)
 
     def test_extract_json_decode_error(self):
-        """Test _weather_extract with invalid JSON."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 200
-        response.json.side_effect = json.JSONDecodeError("msg", "doc", 0)
-
-        with self.assertRaises(exceptions.TransportError):
-            weather._weather_extract(response)
+        self.assertApiTransportError(weather._weather_extract)
 
 
 class WeatherUtilityTest(TestCase):

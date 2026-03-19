@@ -21,16 +21,13 @@ import json
 
 import responses
 
-import googlemaps
 from googlemaps import route_optimization
-from googlemaps import exceptions
+from . import GoogleMapsClientTestCase
+from . import JsonApiExtractTestCase
 from . import TestCase
 
 
-class RouteOptimizationTest(TestCase):
-    def setUp(self):
-        self.key = "AIzaasdf"
-        self.client = googlemaps.Client(self.key)
+class RouteOptimizationTest(GoogleMapsClientTestCase):
 
     @responses.activate
     def test_optimize_tour_basic(self):
@@ -162,57 +159,17 @@ class RouteOptimizationTest(TestCase):
             route_optimization._format_ro_location("invalid")
 
 
-class RouteOptimizationExtractTest(TestCase):
+class RouteOptimizationExtractTest(JsonApiExtractTestCase):
     def test_extract_success(self):
-        """Test _route_optimization_extract with successful response."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 200
-        response.json.return_value = {"routes": []}
-
+        response = self.make_json_response(body={"routes": []})
         result = route_optimization._route_optimization_extract(response)
         self.assertIn("routes", result)
 
     def test_extract_403_over_query_limit(self):
-        """Test _route_optimization_extract with 403 status (OverQueryLimit)."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 403
-        response.json.return_value = {
-            "error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}
-        }
-
-        with self.assertRaises(exceptions._OverQueryLimit) as context:
-            route_optimization._route_optimization_extract(response)
-
-        self.assertEqual(context.exception.status, "RESOURCE_EXHAUSTED")
-        self.assertEqual(context.exception.message, "Quota exceeded")
+        self.assertApiOverQueryLimit(route_optimization._route_optimization_extract)
 
     def test_extract_api_error(self):
-        """Test _route_optimization_extract with other API error."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 400
-        response.json.return_value = {
-            "error": {"status": "INVALID_ARGUMENT", "message": "Bad request"}
-        }
-
-        with self.assertRaises(exceptions.ApiError) as context:
-            route_optimization._route_optimization_extract(response)
-
-        self.assertEqual(context.exception.status, "INVALID_ARGUMENT")
-        self.assertEqual(context.exception.message, "Bad request")
+        self.assertApiErrorStatus(route_optimization._route_optimization_extract)
 
     def test_extract_json_decode_error(self):
-        """Test _route_optimization_extract with invalid JSON."""
-        from unittest.mock import Mock
-
-        response = Mock()
-        response.status_code = 200
-        response.json.side_effect = json.JSONDecodeError("msg", "doc", 0)
-
-        with self.assertRaises(exceptions.TransportError):
-            route_optimization._route_optimization_extract(response)
+        self.assertApiTransportError(route_optimization._route_optimization_extract)

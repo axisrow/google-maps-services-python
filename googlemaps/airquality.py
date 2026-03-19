@@ -17,9 +17,9 @@
 
 """Performs requests to the Google Maps Air Quality API."""
 
-import json
-
-from googlemaps import exceptions
+from googlemaps._api import extract_api_body
+from googlemaps._api import format_lat_lng
+from googlemaps._api import request_binary_content
 
 
 _AIRQUALITY_BASE_URL = "https://airquality.googleapis.com"
@@ -30,25 +30,7 @@ def _airquality_extract(response):
     Mimics the exception handling logic in ``client._get_body``, but
     for Air Quality API which uses a different response format.
     """
-    try:
-        body = response.json()
-    except json.JSONDecodeError:
-        raise exceptions.TransportError("Invalid JSON response from API")
-
-    if "error" in body:
-        error = body["error"]
-        status = error.get("status", response.status_code)
-        message = error.get("message")
-
-        if response.status_code == 403 or status == "RESOURCE_EXHAUSTED":
-            raise exceptions._OverQueryLimit(status, message)
-
-        raise exceptions.ApiError(status, message)
-
-    if response.status_code != 200:
-        raise exceptions.HTTPError(response.status_code)
-
-    return body
+    return extract_api_body(response)
 
 
 def _format_location(location):
@@ -60,14 +42,7 @@ def _format_location(location):
 
     :rtype: dict
     """
-    if isinstance(location, (tuple, list)):
-        return {"latitude": location[0], "longitude": location[1]}
-    elif isinstance(location, dict):
-        if "latitude" in location and "longitude" in location:
-            return location
-        elif "lat" in location and "lng" in location:
-            return {"latitude": location["lat"], "longitude": location["lng"]}
-    raise ValueError("Invalid location format: %s" % location)
+    return format_lat_lng(location)
 
 
 def current_air_quality(client, location, extra_computations=None,
@@ -307,20 +282,7 @@ def air_quality_heatmap_tile(client, map_type, zoom, x, y):
 
     url = "/v1/mapTypes/%s/heatmapTiles/%d/%d/%d" % (map_type, zoom, x, y)
 
-    # For heatmap tiles, we need to return raw bytes, not JSON
-    timeout = client.timeout if client.timeout is not None else 30
-    try:
-        response = client.session.get(
-            _AIRQUALITY_BASE_URL + url + "?key=" + client.key,
-            timeout=timeout
-        )
-    except Exception as e:
-        raise exceptions.TransportError(e)
-
-    if response.status_code != 200:
-        raise exceptions.HTTPError(response.status_code)
-
-    return response.content
+    return request_binary_content(client, _AIRQUALITY_BASE_URL + url + "?key=" + client.key)
 
 
 def _format_time(time_value):

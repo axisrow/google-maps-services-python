@@ -17,10 +17,10 @@
 
 """Performs requests to the Google Maps Route Optimization API."""
 
-import json
 import re
 
-from googlemaps import exceptions
+from googlemaps._api import extract_api_body
+from googlemaps._api import format_lat_lng
 
 
 _ROUTE_OPTIMIZATION_BASE_URL = "https://routeoptimization.googleapis.com"
@@ -31,25 +31,7 @@ def _route_optimization_extract(response):
     Mimics the exception handling logic in ``client._get_body``, but
     for Route Optimization API which uses a different response format.
     """
-    try:
-        body = response.json()
-    except json.JSONDecodeError:
-        raise exceptions.TransportError("Invalid JSON response from API")
-
-    if "error" in body:
-        error = body["error"]
-        status = error.get("status", response.status_code)
-        message = error.get("message")
-
-        if response.status_code == 403 or status == "RESOURCE_EXHAUSTED":
-            raise exceptions._OverQueryLimit(status, message)
-
-        raise exceptions.ApiError(status, message)
-
-    if response.status_code != 200:
-        raise exceptions.HTTPError(response.status_code)
-
-    return body
+    return extract_api_body(response)
 
 
 def _format_ro_location(location):
@@ -61,16 +43,10 @@ def _format_ro_location(location):
 
     :rtype: dict
     """
-    if isinstance(location, (tuple, list)):
-        return {"latLng": {"latitude": location[0], "longitude": location[1]}}
-    elif isinstance(location, dict):
-        if "latLng" in location:
-            return location
-        elif "latitude" in location and "longitude" in location:
-            return {"latLng": {"latitude": location["latitude"], "longitude": location["longitude"]}}
-        elif "lat" in location and "lng" in location:
-            return {"latLng": {"latitude": location["lat"], "longitude": location["lng"]}}
-    raise ValueError("Invalid location format: %s" % location)
+    if isinstance(location, dict) and "latLng" in location:
+        return location
+    lat_lng = format_lat_lng(location)
+    return {"latLng": lat_lng}
 
 
 def optimize_tour(client, parent, model, timeout=None, populate_transition_polylines=None,

@@ -15,10 +15,14 @@
 # the License.
 #
 
-import unittest
 import codecs
+import json
+import unittest
 
 from urllib.parse import urlparse, parse_qsl
+
+import googlemaps
+from googlemaps import exceptions
 
 
 class TestCase(unittest.TestCase):
@@ -38,3 +42,75 @@ class TestCase(unittest.TestCase):
         """Create a unicode string, compatible across all versions of Python."""
         # NOTE(cbro): Python 3-3.2 does not have the u'' syntax.
         return codecs.unicode_escape_decode(string)[0]
+
+
+class GoogleMapsClientTestCase(TestCase):
+    def setUp(self):
+        self.key = "AIzaasdf"
+        self.client = googlemaps.Client(self.key)
+
+
+class JsonApiExtractTestCase(TestCase):
+    def make_json_response(self, status_code=200, body=None, json_side_effect=None):
+        from unittest.mock import Mock
+
+        response = Mock()
+        response.status_code = status_code
+
+        if json_side_effect is not None:
+            response.json.side_effect = json_side_effect
+        else:
+            response.json.return_value = {} if body is None else body
+
+        return response
+
+    def assertApiHttpError(self, extract, body=None, status_code=500):
+        response = self.make_json_response(status_code=status_code, body=body)
+
+        with self.assertRaises(exceptions.HTTPError):
+            extract(response)
+
+    def assertApiOverQueryLimit(
+        self,
+        extract,
+        error_status="RESOURCE_EXHAUSTED",
+        message="Quota exceeded",
+        status_code=403,
+    ):
+        response = self.make_json_response(
+            status_code=status_code,
+            body={"error": {"status": error_status, "message": message}},
+        )
+
+        with self.assertRaises(exceptions._OverQueryLimit) as context:
+            extract(response)
+
+        self.assertEqual(context.exception.status, error_status)
+        self.assertEqual(context.exception.message, message)
+
+    def assertApiErrorStatus(
+        self,
+        extract,
+        error_status="INVALID_ARGUMENT",
+        message="Bad request",
+        status_code=400,
+    ):
+        response = self.make_json_response(
+            status_code=status_code,
+            body={"error": {"status": error_status, "message": message}},
+        )
+
+        with self.assertRaises(exceptions.ApiError) as context:
+            extract(response)
+
+        self.assertEqual(context.exception.status, error_status)
+        self.assertEqual(context.exception.message, message)
+
+    def assertApiTransportError(self, extract):
+        response = self.make_json_response(
+            status_code=200,
+            json_side_effect=json.JSONDecodeError("msg", "doc", 0),
+        )
+
+        with self.assertRaises(exceptions.TransportError):
+            extract(response)
