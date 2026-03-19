@@ -323,3 +323,59 @@ class DirectionsTest(TestCase):
             "alternatives=true&key=%s" % self.key,
             responses.calls[0].request.url,
         )
+
+    @responses.activate
+    def test_transit_mode_and_routing_preference(self):
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/directions/json",
+            body='{"status":"OK","routes":[]}',
+            status=200,
+            content_type="application/json",
+        )
+
+        now = datetime.now()
+        routes = self.client.directions(
+            "Sydney Town Hall",
+            "Parramatta, NSW",
+            mode="transit",
+            departure_time=now,
+            transit_mode=["bus", "subway"],
+            transit_routing_preference="fewer_transfers"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertIn("transit_mode=bus%7Csubway", responses.calls[0].request.url)
+        self.assertIn("transit_routing_preference=fewer_transfers", responses.calls[0].request.url)
+
+    @responses.activate
+    def test_traffic_model(self):
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/directions/json",
+            body='{"status":"OK","routes":[]}',
+            status=200,
+            content_type="application/json",
+        )
+
+        now = datetime.now()
+        routes = self.client.directions(
+            "Sydney",
+            "Melbourne",
+            departure_time=now,
+            traffic_model="pessimistic"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertIn("traffic_model=pessimistic", responses.calls[0].request.url)
+
+    def test_departure_and_arrival_time_error(self):
+        """Test that specifying both departure_time and arrival_time raises ValueError."""
+        now = datetime.now()
+        with self.assertRaises(ValueError):
+            self.client.directions(
+                "Sydney",
+                "Melbourne",
+                departure_time=now,
+                arrival_time=now
+            )

@@ -18,6 +18,7 @@
 """Tests for the weather module."""
 
 import json
+from datetime import datetime
 
 import responses
 
@@ -260,6 +261,17 @@ class WeatherExtractTest(TestCase):
         result = weather._weather_extract(response)
         self.assertIn("temperature", result)
 
+    def test_extract_http_error(self):
+        """Test _weather_extract with HTTP error status (not 200)."""
+        from unittest.mock import Mock
+
+        response = Mock()
+        response.status_code = 500
+        response.json.return_value = {"temperature": {}}
+
+        with self.assertRaises(exceptions.HTTPError):
+            weather._weather_extract(response)
+
     def test_extract_403_over_query_limit(self):
         """Test _weather_extract with 403 status (OverQueryLimit)."""
         from unittest.mock import Mock
@@ -302,3 +314,47 @@ class WeatherExtractTest(TestCase):
 
         with self.assertRaises(exceptions.TransportError):
             weather._weather_extract(response)
+
+
+class WeatherUtilityTest(TestCase):
+    def test_parse_time_with_string(self):
+        """Test _parse_time with string input."""
+        result = weather._parse_time("2024-01-15T08:00:00Z")
+        self.assertEqual(result.year, 2024)
+        self.assertEqual(result.month, 1)
+        self.assertEqual(result.day, 15)
+
+    def test_parse_time_with_datetime(self):
+        """Test _parse_time with datetime input."""
+        dt = datetime(2024, 1, 15, 8, 0, 0)
+        result = weather._parse_time(dt)
+        self.assertEqual(result, dt)
+
+    def test_parse_time_invalid(self):
+        """Test _parse_time with invalid input."""
+        with self.assertRaises(ValueError):
+            weather._parse_time(12345)
+
+    def test_period_to_size_with_tuple(self):
+        """Test _period_to_size with tuple period."""
+        period = ("2024-01-01T00:00:00Z", "2024-01-01T02:00:00Z")
+        result = weather._period_to_size(period, 3600)  # hourly
+        self.assertEqual(result, 2)
+
+    def test_period_to_size_invalid_format(self):
+        """Test _period_to_size with invalid format (not tuple/dict)."""
+        with self.assertRaises(ValueError):
+            weather._period_to_size("invalid", 3600)
+
+    def test_period_to_size_missing_times(self):
+        """Test _period_to_size with missing startTime/endTime."""
+        with self.assertRaises(ValueError):
+            weather._period_to_size({"startTime": "2024-01-01T00:00:00Z"}, 3600)
+
+    def test_period_to_size_negative_duration(self):
+        """Test _period_to_size with endTime before startTime."""
+        with self.assertRaises(ValueError):
+            weather._period_to_size({
+                "startTime": "2024-01-02T00:00:00Z",
+                "endTime": "2024-01-01T00:00:00Z"
+            }, 3600)

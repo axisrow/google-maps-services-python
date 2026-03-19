@@ -19,6 +19,7 @@
 """Tests for the places module."""
 
 import uuid
+import warnings
 
 from types import GeneratorType
 
@@ -253,3 +254,107 @@ class PlacesTest(TestCase):
             "%s?input=pizza+near+New+York&key=%s" % (url, self.key),
             responses.calls[0].request.url,
         )
+
+    @responses.activate
+    def test_find_place_with_deprecated_fields_warning(self):
+        """Test that deprecated fields raise a DeprecationWarning."""
+        import warnings
+
+        url = "https://maps.googleapis.com/maps/api/place/findplacefromtext/json"
+        responses.add(
+            responses.GET,
+            url,
+            body='{"status": "OK", "candidates": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            self.client.find_place(
+                "restaurant",
+                "textquery",
+                fields=["permanently_closed", "place_id"]
+            )
+            self.assertEqual(1, len(w))
+            self.assertEqual(w[0].category, DeprecationWarning)
+
+    @responses.activate
+    def test_places_with_page_token(self):
+        url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+        responses.add(
+            responses.GET,
+            url,
+            body='{"status": "OK", "results": [], "html_attributions": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        self.client.places(query="restaurant", page_token="next_page_token_123")
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertIn("pagetoken=next_page_token_123", responses.calls[0].request.url)
+
+    @responses.activate
+    def test_place_with_deprecated_fields_warning(self):
+        """Test that deprecated fields in place() raise a DeprecationWarning."""
+        import warnings
+
+        url = "https://maps.googleapis.com/maps/api/place/details/json"
+        responses.add(
+            responses.GET,
+            url,
+            body='{"status": "OK", "result": {}, "html_attributions": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            self.client.place(
+                "ChIJN1t_tDeuEmsRUsoyG83frY4",
+                fields=["review", "place_id"]
+            )
+            self.assertEqual(1, len(w))
+            self.assertEqual(w[0].category, DeprecationWarning)
+
+    @responses.activate
+    def test_place_with_session_token(self):
+        url = "https://maps.googleapis.com/maps/api/place/details/json"
+        responses.add(
+            responses.GET,
+            url,
+            body='{"status": "OK", "result": {}, "html_attributions": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        session_token = uuid.uuid4().hex
+        self.client.place("ChIJN1t_tDeuEmsRUsoyG83frY4", session_token=session_token)
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertIn("sessiontoken=%s" % session_token, responses.calls[0].request.url)
+
+    @responses.activate
+    def test_places_photo_with_max_height_only(self):
+        url = "https://maps.googleapis.com/maps/api/place/photo"
+        responses.add(responses.GET, url, status=200)
+
+        ref = "CnRvAAAAwMpdHeWlXl-lH0vp7lez4znKPIWSWvgvZFISdKx45AwJVP1Qp37YOrH7sqHMJ8C-vBDC546decipPHchJhHZL94RcTUfPa1jWzo-rSHaTlbNtjh-N68RkcToUCuY9v2HNpo5mziqkir37WU8FJEqVBIQ4k938TI3e7bf8xq-uwDZcxoUbO_ZJzPxremiQurAYzCTwRhE_V0"
+        response = self.client.places_photo(ref, max_height=100)
+
+        self.assertTrue(isinstance(response, GeneratorType))
+        self.assertEqual(1, len(responses.calls))
+        self.assertURLEqual(
+            "%s?maxheight=100&photoreference=%s&key=%s" % (url, ref, self.key),
+            responses.calls[0].request.url,
+        )
+
+    @responses.activate
+    def test_autocomplete_with_components_validation_error(self):
+        """Test that non-country components raise ValueError."""
+        with self.assertRaises(ValueError):
+            self.client.places_autocomplete(
+                "Google",
+                components={"city": "New York"}
+            )

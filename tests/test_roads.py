@@ -50,6 +50,22 @@ class RoadsTest(TestCase):
         )
 
     @responses.activate
+    def test_snap_to_roads_with_interpolate(self):
+        responses.add(
+            responses.GET,
+            "https://roads.googleapis.com/v1/snapToRoads",
+            body='{"snappedPoints":["foo"]}',
+            status=200,
+            content_type="application/json",
+        )
+
+        results = self.client.snap_to_roads([(40.714728, -73.998672), (40.714729, -73.998673)], interpolate=True)
+        self.assertEqual("foo", results[0])
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertIn("interpolate=true", responses.calls[0].request.url)
+
+    @responses.activate
     def test_nearest_roads(self):
         responses.add(
             responses.GET,

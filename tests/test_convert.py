@@ -179,3 +179,15 @@ class ConvertTest(unittest.TestCase):
 )
 def test_format_float(value, expected):
     assert convert.format_float(value) == expected
+
+
+class ConvertLatLngTest(unittest.TestCase):
+    def test_normalize_lat_lng_with_latitude_longitude(self):
+        """Test normalize_lat_lng with dict using 'latitude'/'longitude' keys."""
+        result = convert.normalize_lat_lng({"latitude": 40.0, "longitude": -74.0})
+        self.assertEqual(result, (40.0, -74.0))
+
+    def test_bounds_with_string(self):
+        """Test bounds with a valid string format."""
+        result = convert.bounds("40,-74|41,-75")
+        self.assertEqual(result, "40,-74|41,-75")

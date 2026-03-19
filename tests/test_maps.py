@@ -127,3 +127,49 @@ class MapsTest(TestCase):
             self.client.static_map(
                 size=(400, 400), center=(63.259591, -144.667969), zoom=6, maptype="test"
             )
+
+    @responses.activate
+    def test_static_map_with_language(self):
+        url = "https://maps.googleapis.com/maps/api/staticmap"
+        responses.add(responses.GET, url, status=200)
+
+        self.client.static_map(
+            size=(400, 400),
+            center=(63.259591, -144.667969),
+            zoom=6,
+            language="es"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertIn("language=es", responses.calls[0].request.url)
+
+    @responses.activate
+    def test_static_map_with_region(self):
+        url = "https://maps.googleapis.com/maps/api/staticmap"
+        responses.add(responses.GET, url, status=200)
+
+        self.client.static_map(
+            size=(400, 400),
+            center=(63.259591, -144.667969),
+            zoom=6,
+            region="au"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertIn("region=au", responses.calls[0].request.url)
+
+    @responses.activate
+    def test_static_map_with_style(self):
+        url = "https://maps.googleapis.com/maps/api/staticmap"
+        responses.add(responses.GET, url, status=200)
+
+        style = {"feature": "road", "element": "geometry", "color": "red"}
+        self.client.static_map(
+            size=(400, 400),
+            center=(63.259591, -144.667969),
+            zoom=6,
+            style=style
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertIn("style=", responses.calls[0].request.url)

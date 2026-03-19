@@ -185,6 +185,17 @@ class SolarExtractTest(TestCase):
         result = solar._solar_extract(response)
         self.assertIn("solarPotential", result)
 
+    def test_extract_http_error(self):
+        """Test _solar_extract with HTTP error status (not 200)."""
+        from unittest.mock import Mock
+
+        response = Mock()
+        response.status_code = 500
+        response.json.return_value = {"solarPotential": {}}
+
+        with self.assertRaises(exceptions.HTTPError):
+            solar._solar_extract(response)
+
     def test_extract_403_over_query_limit(self):
         """Test _solar_extract with 403 status (OverQueryLimit)."""
         from unittest.mock import Mock
@@ -227,3 +238,27 @@ class SolarExtractTest(TestCase):
 
         with self.assertRaises(exceptions.TransportError):
             solar._solar_extract(response)
+
+
+class SolarUtilityTest(TestCase):
+    def setUp(self):
+        self.key = "AIzaasdf"
+        self.client = googlemaps.Client(self.key)
+
+    def test_extract_geotiff_id_without_url(self):
+        """Test _extract_geotiff_id with a simple id (no ://)."""
+        # Test with a simple ID that doesn't contain ://
+        result = solar._extract_geotiff_id("https://solar.googleapis.com/v1/geoTiff:get?id=simple-id-123")
+        self.assertEqual(result, "simple-id-123")
+
+    @responses.activate
+    def test_geo_tiff_transport_error(self):
+        """Test geo_tiff with a transport error."""
+        responses.add(
+            responses.GET,
+            "https://solar.googleapis.com/v1/geoTiff:get",
+            body=Exception("Network error"),
+        )
+
+        with self.assertRaises(googlemaps.exceptions.TransportError):
+            self.client.geo_tiff("https://solar.googleapis.com/v1/geoTiff:get?id=test-asset")

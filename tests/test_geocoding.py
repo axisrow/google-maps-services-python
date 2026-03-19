@@ -387,3 +387,62 @@ class GeocodingTest(TestCase):
             "key=%s&address=%s" % (self.key, "%E4%B8%AD%E5%9B%BD"),
             responses.calls[0].request.url,
         )
+
+    @responses.activate
+    def test_geocode_with_language(self):
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/geocode/json",
+            body='{"status":"OK","results":[]}',
+            status=200,
+            content_type="application/json",
+        )
+
+        results = self.client.geocode("Sydney", language="es").get("results", [])
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertURLEqual(
+            "https://maps.googleapis.com/maps/api/geocode/json?"
+            "key=%s&address=Sydney&language=es" % self.key,
+            responses.calls[0].request.url,
+        )
+
+    @responses.activate
+    def test_reverse_geocode_with_place_id_string(self):
+        """Test reverse_geocode with place_id string (no comma)."""
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/geocode/json",
+            body='{"status":"OK","results":[]}',
+            status=200,
+            content_type="application/json",
+        )
+
+        # place_id strings don't contain commas
+        results = self.client.reverse_geocode("ChIJeRpOeF67j4AR9ydy_PIzPuM").get("results", [])
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertURLEqual(
+            "https://maps.googleapis.com/maps/api/geocode/json?"
+            "place_id=ChIJeRpOeF67j4AR9ydy_PIzPuM&key=%s" % self.key,
+            responses.calls[0].request.url,
+        )
+
+    @responses.activate
+    def test_reverse_geocode_with_language(self):
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/geocode/json",
+            body='{"status":"OK","results":[]}',
+            status=200,
+            content_type="application/json",
+        )
+
+        results = self.client.reverse_geocode((40.714224, -73.961452), language="es").get("results", [])
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertURLEqual(
+            "https://maps.googleapis.com/maps/api/geocode/json?"
+            "latlng=40.714224%%2C-73.961452&key=%s&language=es" % self.key,
+            responses.calls[0].request.url,
+        )

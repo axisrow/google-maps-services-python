@@ -380,3 +380,32 @@ class DistanceMatrixTest(TestCase):
 
         self.assertEqual(1, len(responses.calls))
         self.assertIn("traffic_model=best_guess", responses.calls[0].request.url)
+
+    def test_invalid_travel_mode(self):
+        """Test that invalid mode raises ValueError."""
+        with self.assertRaises(ValueError):
+            self.client.distance_matrix(
+                ["New York, NY"],
+                ["Boston, MA"],
+                mode="invalid_mode"
+            )
+
+    def test_invalid_avoid(self):
+        """Test that invalid avoid parameter raises ValueError."""
+        with self.assertRaises(ValueError):
+            self.client.distance_matrix(
+                ["New York, NY"],
+                ["Boston, MA"],
+                avoid="invalid_avoid"
+            )
+
+    def test_departure_and_arrival_time_error(self):
+        """Test that specifying both departure_time and arrival_time raises ValueError."""
+        now = datetime.now()
+        with self.assertRaises(ValueError):
+            self.client.distance_matrix(
+                ["New York, NY"],
+                ["Boston, MA"],
+                departure_time=now,
+                arrival_time=now
+            )

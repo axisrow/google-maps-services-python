@@ -68,7 +68,7 @@ def _format_waypoint(waypoint):
         return {"address": waypoint}
     elif isinstance(waypoint, (tuple, list)):
         if len(waypoint) != 2:
-            raise ValueError("Invalid waypoint format: %s" % waypoint)
+            raise ValueError("Invalid waypoint format: %s" % (waypoint,))
         return {"location": {"latLng": {"latitude": waypoint[0], "longitude": waypoint[1]}}}
     elif isinstance(waypoint, dict):
         if "placeId" in waypoint or "address" in waypoint or "location" in waypoint:

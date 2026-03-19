@@ -312,6 +312,17 @@ class RoutesExtractTest(TestCase):
         result = routes._routes_extract(response)
         self.assertIn("routes", result)
 
+    def test_extract_http_error(self):
+        """Test _routes_extract with HTTP error status (not 200)."""
+        from unittest.mock import Mock
+
+        response = Mock()
+        response.status_code = 500
+        response.json.return_value = {"routes": []}
+
+        with self.assertRaises(exceptions.HTTPError):
+            routes._routes_extract(response)
+
     def test_extract_403_over_query_limit(self):
         """Test _routes_extract with 403 status (OverQueryLimit)."""
         from unittest.mock import Mock
@@ -354,3 +365,280 @@ class RoutesExtractTest(TestCase):
 
         with self.assertRaises(exceptions.TransportError):
             routes._routes_extract(response)
+
+
+class RoutesFormattingTest(TestCase):
+    def test_format_waypoint_invalid_tuple_length(self):
+        """Test _format_waypoint with tuple of invalid length."""
+        with self.assertRaises(ValueError):
+            routes._format_waypoint((40.7128, -74.0060, 0))  # 3-element tuple
+
+
+class RoutesParamsTest(TestCase):
+    def setUp(self):
+        self.key = "AIzaasdf"
+        self.client = googlemaps.Client(self.key)
+
+    @responses.activate
+    def test_compute_routes_with_arrival_time(self):
+        responses.add(
+            responses.POST,
+            "https://routes.googleapis.com/directions/v2:computeRoutes",
+            body='{"routes": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        arrival = datetime(2024, 1, 15, 10, 0, 0)
+        self.client.compute_routes(
+            origin=(40.7128, -74.0060),
+            destination=(34.0522, -118.2437),
+            arrival_time=arrival
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["arrivalTime"], "2024-01-15T10:00:00Z")
+
+    @responses.activate
+    def test_compute_routes_with_requested_reference_routes(self):
+        responses.add(
+            responses.POST,
+            "https://routes.googleapis.com/directions/v2:computeRoutes",
+            body='{"routes": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        self.client.compute_routes(
+            origin=(40.7128, -74.0060),
+            destination=(34.0522, -118.2437),
+            requested_reference_routes=["FUEL_EFFICIENT"]
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["requestedReferenceRoutes"], ["FUEL_EFFICIENT"])
+
+    @responses.activate
+    def test_compute_routes_with_extra_computations(self):
+        responses.add(
+            responses.POST,
+            "https://routes.googleapis.com/directions/v2:computeRoutes",
+            body='{"routes": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        self.client.compute_routes(
+            origin=(40.7128, -74.0060),
+            destination=(34.0522, -118.2437),
+            extra_computations=["TRAFFIC_ON_POLYLINE"]
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["extraComputations"], ["TRAFFIC_ON_POLYLINE"])
+
+    @responses.activate
+    def test_compute_route_matrix_with_routing_preference(self):
+        responses.add(
+            responses.POST,
+            "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix",
+            body='[]',
+            status=200,
+            content_type="application/json",
+        )
+
+        self.client.compute_route_matrix(
+            origins=[(40.7128, -74.0060)],
+            destinations=[(34.0522, -118.2437)],
+            routing_preference="TRAFFIC_AWARE"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["routingPreference"], "TRAFFIC_AWARE")
+
+    @responses.activate
+    def test_compute_route_matrix_with_departure_time(self):
+        responses.add(
+            responses.POST,
+            "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix",
+            body='[]',
+            status=200,
+            content_type="application/json",
+        )
+
+        departure = datetime(2024, 1, 15, 8, 0, 0)
+        self.client.compute_route_matrix(
+            origins=[(40.7128, -74.0060)],
+            destinations=[(34.0522, -118.2437)],
+            departure_time=departure
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["departureTime"], "2024-01-15T08:00:00Z")
+
+    @responses.activate
+    def test_compute_route_matrix_with_arrival_time(self):
+        responses.add(
+            responses.POST,
+            "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix",
+            body='[]',
+            status=200,
+            content_type="application/json",
+        )
+
+        arrival = datetime(2024, 1, 15, 10, 0, 0)
+        self.client.compute_route_matrix(
+            origins=[(40.7128, -74.0060)],
+            destinations=[(34.0522, -118.2437)],
+            arrival_time=arrival
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["arrivalTime"], "2024-01-15T10:00:00Z")
+
+    @responses.activate
+    def test_compute_route_matrix_with_language_code(self):
+        responses.add(
+            responses.POST,
+            "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix",
+            body='[]',
+            status=200,
+            content_type="application/json",
+        )
+
+        self.client.compute_route_matrix(
+            origins=[(40.7128, -74.0060)],
+            destinations=[(34.0522, -118.2437)],
+            language_code="en-US"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["languageCode"], "en-US")
+
+    @responses.activate
+    def test_compute_route_matrix_with_region_code(self):
+        responses.add(
+            responses.POST,
+            "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix",
+            body='[]',
+            status=200,
+            content_type="application/json",
+        )
+
+        self.client.compute_route_matrix(
+            origins=[(40.7128, -74.0060)],
+            destinations=[(34.0522, -118.2437)],
+            region_code="US"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["regionCode"], "US")
+
+    @responses.activate
+    def test_compute_route_matrix_with_units(self):
+        responses.add(
+            responses.POST,
+            "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix",
+            body='[]',
+            status=200,
+            content_type="application/json",
+        )
+
+        self.client.compute_route_matrix(
+            origins=[(40.7128, -74.0060)],
+            destinations=[(34.0522, -118.2437)],
+            units="IMPERIAL"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["units"], "IMPERIAL")
+
+    @responses.activate
+    def test_compute_route_matrix_with_extra_computations(self):
+        responses.add(
+            responses.POST,
+            "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix",
+            body='[]',
+            status=200,
+            content_type="application/json",
+        )
+
+        self.client.compute_route_matrix(
+            origins=[(40.7128, -74.0060)],
+            destinations=[(34.0522, -118.2437)],
+            extra_computations=["TRAFFIC_ON_POLYLINE"]
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["extraComputations"], ["TRAFFIC_ON_POLYLINE"])
+
+    @responses.activate
+    def test_compute_route_matrix_with_traffic_model(self):
+        responses.add(
+            responses.POST,
+            "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix",
+            body='[]',
+            status=200,
+            content_type="application/json",
+        )
+
+        self.client.compute_route_matrix(
+            origins=[(40.7128, -74.0060)],
+            destinations=[(34.0522, -118.2437)],
+            traffic_model="BEST_GUESS"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["trafficModel"], "BEST_GUESS")
+
+    @responses.activate
+    def test_compute_route_matrix_with_transit_preferences(self):
+        responses.add(
+            responses.POST,
+            "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix",
+            body='[]',
+            status=200,
+            content_type="application/json",
+        )
+
+        self.client.compute_route_matrix(
+            origins=[(40.7128, -74.0060)],
+            destinations=[(34.0522, -118.2437)],
+            travel_mode="TRANSIT",
+            transit_preferences={"routingPreference": "LESS_WALKING"}
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual(body["transitPreferences"]["routingPreference"], "LESS_WALKING")
+
+    @responses.activate
+    def test_compute_route_matrix_with_field_mask(self):
+        responses.add(
+            responses.POST,
+            "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix",
+            body='[]',
+            status=200,
+            content_type="application/json",
+        )
+
+        self.client.compute_route_matrix(
+            origins=[(40.7128, -74.0060)],
+            destinations=[(34.0522, -118.2437)],
+            field_mask="originIndex,destinationIndex,distanceMeters"
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        headers = responses.calls[0].request.headers
+        self.assertEqual(headers["X-Goog-FieldMask"], "originIndex,destinationIndex,distanceMeters")

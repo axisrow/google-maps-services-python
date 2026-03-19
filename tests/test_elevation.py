@@ -132,3 +132,21 @@ class ElevationTest(TestCase):
             "locations=40,-73&key=%s" % self.key,
             responses.calls[0].request.url,
         )
+
+    @responses.activate
+    def test_elevation_along_path_with_encoded_string(self):
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/elevation/json",
+            body='{"status":"OK","results":[]}',
+            status=200,
+            content_type="application/json",
+        )
+
+        # Test with encoded polyline string (string that doesn't look like a coordinate tuple)
+        encoded_polyline = "a~l~Fjk~uOwHJy@P"
+        results = self.client.elevation_along_path(encoded_polyline, 5)
+
+        self.assertEqual(1, len(responses.calls))
+        # When path is a string, it should be prefixed with "enc:"
+        self.assertIn("path=enc%3A", responses.calls[0].request.url)

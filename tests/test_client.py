@@ -454,3 +454,84 @@ class ClientTest(TestCase):
             client._request("/foo", {})
 
         self.assertEqual(1, len(responses.calls))
+
+    def test_timeout_with_connect_and_read_timeout_conflict(self):
+        """Test that specifying timeout + connect/read_timeout raises ValueError."""
+        with self.assertRaises(ValueError):
+            googlemaps.Client(key="AIzaasdf", timeout=5, connect_timeout=5)
+
+    def test_queries_per_minute_only(self):
+        """Test Client with only queries_per_minute set."""
+        client = googlemaps.Client(key="AIzaasdf", queries_per_second=None, queries_per_minute=60)
+        self.assertEqual(client.queries_quota, 1)
+
+    def test_queries_quota_invalid(self):
+        """Test Client with invalid queries_per_second/queries_per_minute values."""
+        with self.assertRaises(ValueError):
+            googlemaps.Client(key="AIzaasdf", queries_per_second=None, queries_per_minute=None)
+
+        with self.assertRaises(ValueError):
+            googlemaps.Client(key="AIzaasdf", queries_per_second="invalid", queries_per_minute="invalid")
+
+    def test_clear_experience_id_when_no_headers(self):
+        """Test clear_experience_id when headers is None."""
+        client = googlemaps.Client(key="AIzaasdf")
+        client.requests_kwargs.pop("headers", None)
+        # Should not raise an error
+        client.clear_experience_id()
+        self.assertIsNone(client.get_experience_id())
+
+    @responses.activate
+    def test_retry_timeout_exceeded(self):
+        """Test that retry_timeout exceeded raises Timeout exception."""
+        # Use very short retry_timeout to trigger timeout
+        client = googlemaps.Client(key="AIzaasdf", retry_timeout=0)
+
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/geocode/json",
+            status=500,
+            content_type="application/json",
+        )
+
+        with self.assertRaises(googlemaps.exceptions.Timeout):
+            client.geocode("Test")
+
+    @responses.activate
+    def test_request_timeout_exception(self):
+        """Test that requests.exceptions.Timeout is converted to googlemaps.exceptions.Timeout."""
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/geocode/json",
+            body=requests.exceptions.Timeout(),
+        )
+
+        client = googlemaps.Client(key="AIzaasdf")
+        with self.assertRaises(googlemaps.exceptions.Timeout):
+            client.geocode("Test")
+
+    @responses.activate
+    def test_request_transport_exception(self):
+        """Test that generic Exception is converted to TransportError."""
+        responses.add(
+            responses.GET,
+            "https://maps.googleapis.com/maps/api/geocode/json",
+            body=Exception("Network error"),
+        )
+
+        client = googlemaps.Client(key="AIzaasdf")
+        with self.assertRaises(googlemaps.exceptions.TransportError):
+            client.geocode("Test")
+
+    def test_make_api_method_no_extra_params(self):
+        """Test make_api_method wrapper when _extra_params attribute doesn't exist."""
+        from googlemaps.client import make_api_method
+
+        def mock_api(client, param):
+            return param
+
+        wrapped = make_api_method(mock_api)
+        client = googlemaps.Client(key="AIzaasdf")
+        # Call without extra_params - should not raise AttributeError
+        result = wrapped(client, "test_value")
+        self.assertEqual(result, "test_value")
