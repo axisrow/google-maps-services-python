@@ -16,6 +16,8 @@
 #
 
 """Performs requests to the Google Maps Address Validation API."""
+import json
+
 from googlemaps import exceptions
 
 
@@ -27,7 +29,10 @@ def _addressvalidation_extract(response):
     Mimics the exception handling logic in ``client._get_body``, but
     for addressvalidation which uses a different response format.
     """
-    body = response.json()
+    try:
+        body = response.json()
+    except json.JSONDecodeError:
+        raise exceptions.TransportError("Invalid JSON response from API")
     return body
 
     # if response.status_code in (200, 404):
@@ -71,7 +76,7 @@ def addressvalidation(client, addressLines, regionCode=None , locality=None, ena
     if locality is not None:
         params["address"]["locality"] = locality
 
-    if enableUspsCass is not False or enableUspsCass is not None:
+    if enableUspsCass is not None:
         params["enableUspsCass"] = enableUspsCass
 
     return client._request("/v1:validateAddress", {},  # No GET params
