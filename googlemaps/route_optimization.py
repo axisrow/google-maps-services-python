@@ -21,6 +21,7 @@ import re
 
 from googlemaps._api import extract_api_body
 from googlemaps._api import format_lat_lng
+from googlemaps._api import modern_api_request
 
 
 _ROUTE_OPTIMIZATION_BASE_URL = "https://routeoptimization.googleapis.com"
@@ -157,11 +158,67 @@ def optimize_tour(client, parent, model, timeout=None, populate_transition_polyl
     if max_interpolation_distance_meters:
         request_body["maxInterpolationDistanceMeters"] = max_interpolation_distance_meters
 
-    return client._request(
+    return modern_api_request(
+        client,
         "/v1/%s:optimizeTours" % parent,
-        {},
         base_url=_ROUTE_OPTIMIZATION_BASE_URL,
-        accepts_clientid=False,
+        post_json=request_body,
         extract_body=_route_optimization_extract,
-        post_json=request_body
+    )
+
+
+def batch_optimize_tours(client, parent, requests, model_configs=None,
+                         timeout=None, allow_large_deadline_despite_interruption_risk=None):
+    """Runs Route Optimization asynchronously and returns a long-running operation.
+
+    For more information see:
+    https://developers.google.com/maps/documentation/route-optimization
+
+    :param parent: The parent resource name. Format: "projects/{projectId}" or
+        "projects/{projectId}/locations/{locationId}".
+    :type parent: string
+
+    :param requests: A list of optimizeTours-style request objects.
+    :type requests: list
+
+    :param model_configs: Optional list of async model configuration objects.
+    :type model_configs: list
+
+    :param timeout: Maximum time for each optimization request. Example: "60s".
+    :type timeout: string
+
+    :param allow_large_deadline_despite_interruption_risk: Whether larger
+        deadlines are allowed at the risk of interruption.
+    :type allow_large_deadline_despite_interruption_risk: bool
+
+    :rtype: dict containing the long-running operation metadata
+    """
+    if not parent or not re.match(r"^projects/[^/]+(?:/locations/[^/]+)?$", parent):
+        raise ValueError(
+            "parent must be in format 'projects/{projectId}' or "
+            "'projects/{projectId}/locations/{locationId}', got: %s" % parent
+        )
+    if not requests:
+        raise ValueError("requests must be a non-empty list")
+
+    request_body = {
+        "parent": parent,
+        "requests": requests,
+    }
+
+    if model_configs is not None:
+        request_body["modelConfigs"] = model_configs
+
+    if timeout:
+        request_body["timeout"] = timeout
+
+    if allow_large_deadline_despite_interruption_risk is not None:
+        request_body["allowLargeDeadlineDespiteInterruptionRisk"] = allow_large_deadline_despite_interruption_risk
+
+    return modern_api_request(
+        client,
+        "/v1/%s:batchOptimizeTours" % parent,
+        base_url=_ROUTE_OPTIMIZATION_BASE_URL,
+        post_json=request_body,
+        extract_body=_route_optimization_extract,
     )

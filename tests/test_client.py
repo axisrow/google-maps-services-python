@@ -46,12 +46,20 @@ class ClientTest(TestCase):
             "weather_forecast",
             "weather_hourly_forecast",
             "historical_weather",
+            "weather_alerts",
             "compute_routes",
             "compute_route_matrix",
             "optimize_tour",
+            "batch_optimize_tours",
             "building_insights",
             "solar_data_layers",
             "geo_tiff",
+            "places_text_search",
+            "places_nearby_search",
+            "place_details",
+            "place_photo",
+            "places_autocomplete_new",
+            "street_view",
         ):
             self.assertTrue(hasattr(client, attr), attr)
 

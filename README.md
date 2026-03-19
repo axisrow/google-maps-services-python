@@ -14,19 +14,29 @@ Use Python? Want to geocode something? Looking for directions?
 Maybe matrices of directions? This library brings the Google Maps Platform Web
 Services to your Python application.
 
-The Python Client for Google Maps Services is a Python Client library for the following Google Maps
-APIs:
+The Python Client for Google Maps Services is a Python Client library for the following current Google Maps Platform APIs:
 
- - Directions API
- - Distance Matrix API
- - Elevation API
+ - Routes API
+ - Route Optimization API
  - Geocoding API
  - Geolocation API
  - Time Zone API
  - Roads API
- - Places API
- - Maps Static API
+ - Places API (New)
  - Address Validation API
+ - Air Quality API
+ - Pollen API
+ - Solar API
+ - Weather API
+ - Maps Static API
+ - Street View Static API
+
+The library also keeps a compatibility layer for legacy web service APIs:
+
+ - Directions API
+ - Distance Matrix API
+ - Elevation API
+ - Places API (Legacy)
 
 Keep in mind that the same [terms and conditions](https://developers.google.com/maps/terms) apply
 to usage of the APIs when they're accessed through this library.
@@ -66,7 +76,7 @@ Note that you will need requests 2.4.0 or higher if you want to specify connect/
 
 ## Usage
 
-This example uses the Geocoding API and the Directions API with an API key:
+This example uses Geocoding, Places API (New), Routes API, and Address Validation with an API key:
 
 ```python
 import googlemaps
@@ -80,12 +90,21 @@ geocode_result = gmaps.geocode('1600 Amphitheatre Parkway, Mountain View, CA')
 # Look up an address with reverse geocoding
 reverse_geocode_result = gmaps.reverse_geocode((40.714224, -73.961452))
 
-# Request directions via public transit
+# Places API (New) text search
+places_result = gmaps.places_text_search(
+    "coffee in Mountain View",
+    field_mask="places.displayName,places.formattedAddress,nextPageToken",
+)
+
+# Routes API
 now = datetime.now()
-directions_result = gmaps.directions("Sydney Town Hall",
-                                     "Parramatta, NSW",
-                                     mode="transit",
-                                     departure_time=now)
+routes_result = gmaps.compute_routes(
+    origin="Sydney Town Hall",
+    destination="Parramatta, NSW",
+    travel_mode="TRANSIT",
+    departure_time=now,
+    field_mask="routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline",
+)
 
 # Validate an address with address validation
 addressvalidation_result =  gmaps.addressvalidation(['1600 Amphitheatre Pk'], 
@@ -93,8 +112,8 @@ addressvalidation_result =  gmaps.addressvalidation(['1600 Amphitheatre Pk'],
                                                     locality='Mountain View', 
                                                     enableUspsCass=True)
 
-# Get an Address Descriptor of a location in the reverse geocoding response
-address_descriptor_result = gmaps.reverse_geocode((40.714224, -73.961452), enable_address_descriptor=True)
+# Legacy Places API compatibility remains available
+legacy_places_result = gmaps.places("restaurant", location=(40.714224, -73.961452), radius=500)
 
 ```
 
@@ -134,6 +153,9 @@ are returned from the API.
 
 ### API docs
 - [Google Maps Platform web services](https://developers.google.com/maps/apis-by-platform#web_service_apis)
+- [Places API (New)](https://developers.google.com/maps/documentation/places/web-service/overview)
+- [Routes API](https://developers.google.com/maps/documentation/routes/)
+- [Route Optimization API](https://developers.google.com/maps/documentation/route-optimization/)
 - [Directions API](https://developers.google.com/maps/documentation/directions/)
 - [Distance Matrix API](https://developers.google.com/maps/documentation/distancematrix/)
 - [Elevation API](https://developers.google.com/maps/documentation/elevation/)
@@ -141,8 +163,9 @@ are returned from the API.
 - [Geolocation API](https://developers.google.com/maps/documentation/geolocation/)
 - [Time Zone API](https://developers.google.com/maps/documentation/timezone/)
 - [Roads API](https://developers.google.com/maps/documentation/roads/)
-- [Places API](https://developers.google.com/places/)
+- [Places API (Legacy)](https://developers.google.com/maps/documentation/places/web-service/legacy/overview)
 - [Maps Static API](https://developers.google.com/maps/documentation/maps-static/)
+- [Street View Static API](https://developers.google.com/maps/documentation/streetview/)
 
 ### Support
 - [Report an issue](https://github.com/googlemaps/google-maps-services-python/issues)

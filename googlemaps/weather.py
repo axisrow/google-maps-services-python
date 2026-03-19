@@ -21,6 +21,7 @@ from datetime import datetime
 
 from googlemaps._api import extract_api_body
 from googlemaps._api import format_lat_lng
+from googlemaps._api import modern_api_request
 
 
 _WEATHER_BASE_URL = "https://weather.googleapis.com"
@@ -99,8 +100,7 @@ def _weather_params(location, language_code=None, units=None, page_size=None,
     return params
 
 
-def current_weather(client, location, weather_elements=None, extra_computations=None,
-                    language_code=None, units=None):
+def current_weather(client, location, language_code=None, units=None):
     """Returns current weather conditions for a specific location.
 
     The Weather API provides minute-by-minute, hourly, and daily weather
@@ -111,17 +111,6 @@ def current_weather(client, location, weather_elements=None, extra_computations=
     :param location: Location for the request. Can be a (lat, lng) tuple
         or a dict with 'latitude' and 'longitude' keys.
     :type location: tuple or dict
-
-    :param weather_elements: List of weather elements to include.
-        Valid values: "temperature", "dewPoint", "relativeHumidity",
-        "windSpeed", "windDirection", "pressure", "precipitation",
-        "cloudCover", "visibility", "uvIndex", "feelsLikeTemperature",
-        "weatherCondition", "daytime", "airQualityIndex", "sunriseSunset",
-        "isobaricCondition", "pressureTendency".
-    :type weather_elements: list of strings
-
-    :param extra_computations: List of extra computations to perform.
-    :type extra_computations: list of strings
 
     :param language_code: Language code for the response (e.g., "en").
     :type language_code: string
@@ -138,17 +127,16 @@ def current_weather(client, location, weather_elements=None, extra_computations=
         units=units,
     )
 
-    return client._request(
+    return modern_api_request(
+        client,
         "/v1/currentConditions:lookup",
-        params,
         base_url=_WEATHER_BASE_URL,
-        accepts_clientid=False,
-        extract_body=_weather_extract
+        params=params,
+        extract_body=_weather_extract,
     )
 
 
-def weather_forecast(client, location, weather_elements=None, extra_computations=None,
-                     language_code=None, units=None, period=None,
+def weather_forecast(client, location, language_code=None, units=None, period=None,
                      page_size=None, page_token=None):
     """Returns weather forecast for a specific location and time period.
 
@@ -157,12 +145,6 @@ def weather_forecast(client, location, weather_elements=None, extra_computations
     :param location: Location for the request. Can be a (lat, lng) tuple
         or a dict with 'latitude' and 'longitude' keys.
     :type location: tuple or dict
-
-    :param weather_elements: List of weather elements to include.
-    :type weather_elements: list of strings
-
-    :param extra_computations: List of extra computations to perform.
-    :type extra_computations: list of strings
 
     :param language_code: Language code for the response.
     :type language_code: string
@@ -193,17 +175,16 @@ def weather_forecast(client, location, weather_elements=None, extra_computations
     if period:
         params["days"] = _period_to_size(period, 86400)
 
-    return client._request(
+    return modern_api_request(
+        client,
         "/v1/forecast/days:lookup",
-        params,
         base_url=_WEATHER_BASE_URL,
-        accepts_clientid=False,
-        extract_body=_weather_extract
+        params=params,
+        extract_body=_weather_extract,
     )
 
 
-def weather_hourly_forecast(client, location, weather_elements=None, extra_computations=None,
-                            language_code=None, units=None, period=None,
+def weather_hourly_forecast(client, location, language_code=None, units=None, period=None,
                             page_size=None, page_token=None):
     """Returns hourly weather forecast for a specific location.
 
@@ -212,12 +193,6 @@ def weather_hourly_forecast(client, location, weather_elements=None, extra_compu
     :param location: Location for the request. Can be a (lat, lng) tuple
         or a dict with 'latitude' and 'longitude' keys.
     :type location: tuple or dict
-
-    :param weather_elements: List of weather elements to include.
-    :type weather_elements: list of strings
-
-    :param extra_computations: List of extra computations to perform.
-    :type extra_computations: list of strings
 
     :param language_code: Language code for the response.
     :type language_code: string
@@ -248,17 +223,16 @@ def weather_hourly_forecast(client, location, weather_elements=None, extra_compu
     if period:
         params["hours"] = _period_to_size(period, 3600)
 
-    return client._request(
+    return modern_api_request(
+        client,
         "/v1/forecast/hours:lookup",
-        params,
         base_url=_WEATHER_BASE_URL,
-        accepts_clientid=False,
-        extract_body=_weather_extract
+        params=params,
+        extract_body=_weather_extract,
     )
 
 
-def historical_weather(client, location, period, weather_elements=None,
-                       extra_computations=None, language_code=None, units=None,
+def historical_weather(client, location, period, language_code=None, units=None,
                        page_size=None, page_token=None):
     """Returns historical weather data for a specific location and time period.
 
@@ -270,12 +244,6 @@ def historical_weather(client, location, period, weather_elements=None,
 
     :param period: Time period dict with 'startTime' and 'endTime' keys.
     :type period: dict
-
-    :param weather_elements: List of weather elements to include.
-    :type weather_elements: list of strings
-
-    :param extra_computations: List of extra computations to perform.
-    :type extra_computations: list of strings
 
     :param language_code: Language code for the response.
     :type language_code: string
@@ -301,10 +269,47 @@ def historical_weather(client, location, period, weather_elements=None,
     )
     params["hours"] = _period_to_size(period, 3600)
 
-    return client._request(
+    return modern_api_request(
+        client,
         "/v1/history/hours:lookup",
-        params,
         base_url=_WEATHER_BASE_URL,
-        accepts_clientid=False,
-        extract_body=_weather_extract
+        params=params,
+        extract_body=_weather_extract,
+    )
+
+
+def weather_alerts(client, location, language_code=None, page_size=None,
+                   page_token=None):
+    """Returns public weather alerts for a specific location.
+
+    For more information see: https://developers.google.com/maps/documentation/weather
+
+    :param location: Location for the request. Can be a (lat, lng) tuple
+        or a dict with 'latitude' and 'longitude' keys.
+    :type location: tuple or dict
+
+    :param language_code: Language code for the response.
+    :type language_code: string
+
+    :param page_size: Maximum number of alert records per page.
+    :type page_size: int
+
+    :param page_token: Token for pagination.
+    :type page_token: string
+
+    :rtype: dict containing weather alert information
+    """
+    params = _weather_params(
+        location,
+        language_code=language_code,
+        page_size=page_size,
+        page_token=page_token,
+    )
+
+    return modern_api_request(
+        client,
+        "/v1/publicAlerts:lookup",
+        base_url=_WEATHER_BASE_URL,
+        params=params,
+        extract_body=_weather_extract,
     )

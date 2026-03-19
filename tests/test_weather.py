@@ -58,8 +58,6 @@ class WeatherTest(GoogleMapsClientTestCase):
 
         self.client.current_weather(
             (40.0, -74.0),
-            weather_elements=["temperature", "humidity", "windSpeed"],
-            extra_computations=["precipitation_probability"],
             language_code="en",
             units="METRIC"
         )
@@ -116,7 +114,6 @@ class WeatherTest(GoogleMapsClientTestCase):
 
         self.client.weather_forecast(
             (40.0, -74.0),
-            weather_elements=["temperature"],
             page_size=24,
             page_token="prev_token"
         )
@@ -158,7 +155,6 @@ class WeatherTest(GoogleMapsClientTestCase):
 
         self.client.weather_hourly_forecast(
             (40.0, -74.0),
-            weather_elements=["temperature", "windSpeed"],
             language_code="en",
             units="METRIC",
             period=period,
@@ -210,8 +206,6 @@ class WeatherTest(GoogleMapsClientTestCase):
         self.client.historical_weather(
             (40.0, -74.0),
             period=period,
-            weather_elements=["temperature"],
-            extra_computations=["uv_index"],
             language_code="en",
             units="IMPERIAL",
             page_size=48,
@@ -225,6 +219,30 @@ class WeatherTest(GoogleMapsClientTestCase):
         self.assertIn("languageCode=en", url)
         self.assertIn("pageSize=48", url)
         self.assertIn("pageToken=token", url)
+
+    @responses.activate
+    def test_weather_alerts(self):
+        responses.add(
+            responses.GET,
+            "https://weather.googleapis.com/v1/publicAlerts:lookup",
+            body='{"alerts": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        result = self.client.weather_alerts(
+            (40.0, -74.0),
+            language_code="en",
+            page_size=5,
+            page_token="alerts_token",
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertIn("alerts", result)
+        url = responses.calls[0].request.url
+        self.assertIn("languageCode=en", url)
+        self.assertIn("pageSize=5", url)
+        self.assertIn("pageToken=alerts_token", url)
 
     def test_format_weather_location_tuple(self):
         result = weather._format_weather_location((40.0, -74.0))

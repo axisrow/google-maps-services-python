@@ -19,6 +19,13 @@
 import warnings
 
 from googlemaps import convert
+from googlemaps._api import extract_api_body
+from googlemaps._api import format_lat_lng
+from googlemaps._api import modern_api_request
+from googlemaps._api import request_binary_content
+
+
+_PLACES_NEW_BASE_URL = "https://places.googleapis.com"
 
 
 PLACES_FIND_FIELDS_BASIC = {"business_status",
@@ -128,7 +135,7 @@ def find_place(
     client, input, input_type, fields=None, location_bias=None, language=None
 ):
     """
-    A Find Place request takes a text input, and returns a place.
+    Legacy Places API request that takes a text input and returns a place.
     The text input can be any kind of Places data, for example,
     a name, address, or phone number.
 
@@ -209,7 +216,7 @@ def places(
     page_token=None,
 ):
     """
-    Places search.
+    Legacy Places API text search.
 
     :param query: The text string on which to search, for example: "restaurant".
     :type query: string
@@ -287,7 +294,7 @@ def places_nearby(
     page_token=None,
 ):
     """
-    Performs nearby search for places.
+    Performs a legacy Places API nearby search.
 
     :param location: The latitude/longitude value for which you wish to obtain the
                      closest, human-readable address.
@@ -435,7 +442,7 @@ def place(
     reviews_sort="most_relevant",
 ):
     """
-    Comprehensive details for an individual place.
+    Legacy Places API details for an individual place.
 
     :param place_id: A textual identifier that uniquely identifies a place,
         returned from a Places search.
@@ -498,7 +505,7 @@ def place(
 
 def places_photo(client, photo_reference, max_width=None, max_height=None):
     """
-    Downloads a photo from the Places API.
+    Downloads a photo from the legacy Places API.
 
     :param photo_reference: A string identifier that uniquely identifies a
         photo, as provided by either a Places search or Places detail request.
@@ -558,7 +565,7 @@ def places_autocomplete(
     strict_bounds=False,
 ):
     """
-    Returns Place predictions given a textual search string and optional
+    Returns legacy Places API predictions given a textual search string and optional
     geographic bounds.
 
     :param input_text: The text string on which to search.
@@ -627,7 +634,7 @@ def places_autocomplete_query(
     client, input_text, offset=None, location=None, radius=None, language=None
 ):
     """
-    Returns Place predictions given a textual search query, such as
+    Returns legacy Places API predictions given a textual search query, such as
     "pizza near New York", and optional geographic bounds.
 
     :param input_text: The text query on which to search.
@@ -705,3 +712,260 @@ def _autocomplete(
 
     url = "/maps/api/place/%sautocomplete/json" % url_part
     return client._request(url, params).get("predictions", [])
+
+
+def _require_field_mask(field_mask, method_name):
+    if not field_mask:
+        raise ValueError("%s requires a non-empty field_mask" % method_name)
+
+
+def _format_new_location(location):
+    if location is None:
+        return None
+    return format_lat_lng(location)
+
+
+def _new_places_headers(field_mask):
+    _require_field_mask(field_mask, "Places API (New) method")
+    return {"X-Goog-FieldMask": field_mask}
+
+
+def places_text_search(
+    client,
+    text_query,
+    field_mask,
+    location_bias=None,
+    location_restriction=None,
+    language_code=None,
+    region_code=None,
+    included_type=None,
+    open_now=None,
+    min_rating=None,
+    rank_preference=None,
+    page_size=None,
+    page_token=None,
+    price_levels=None,
+    strict_type_filtering=None,
+    ev_options=None,
+    routing_parameters=None,
+    search_along_route_parameters=None,
+    include_pure_service_area_businesses=None,
+    include_future_opening_businesses=None,
+):
+    """Runs a Places API (New) Text Search request."""
+    _require_field_mask(field_mask, "places_text_search")
+    if location_bias and location_restriction:
+        raise ValueError("Specify either location_bias or location_restriction, not both")
+
+    request_body = {"textQuery": text_query}
+    if location_bias:
+        request_body["locationBias"] = location_bias
+    if location_restriction:
+        request_body["locationRestriction"] = location_restriction
+    if language_code:
+        request_body["languageCode"] = language_code
+    if region_code:
+        request_body["regionCode"] = region_code
+    if included_type:
+        request_body["includedType"] = included_type
+    if open_now is not None:
+        request_body["openNow"] = open_now
+    if min_rating is not None:
+        request_body["minRating"] = min_rating
+    if rank_preference:
+        request_body["rankPreference"] = rank_preference
+    if page_size is not None:
+        request_body["pageSize"] = page_size
+    if page_token:
+        request_body["pageToken"] = page_token
+    if price_levels:
+        request_body["priceLevels"] = price_levels
+    if strict_type_filtering is not None:
+        request_body["strictTypeFiltering"] = strict_type_filtering
+    if ev_options:
+        request_body["evOptions"] = ev_options
+    if routing_parameters:
+        request_body["routingParameters"] = routing_parameters
+    if search_along_route_parameters:
+        request_body["searchAlongRouteParameters"] = search_along_route_parameters
+    if include_pure_service_area_businesses is not None:
+        request_body["includePureServiceAreaBusinesses"] = include_pure_service_area_businesses
+    if include_future_opening_businesses is not None:
+        request_body["includeFutureOpeningBusinesses"] = include_future_opening_businesses
+
+    return modern_api_request(
+        client,
+        "/v1/places:searchText",
+        base_url=_PLACES_NEW_BASE_URL,
+        post_json=request_body,
+        headers=_new_places_headers(field_mask),
+        extract_body=extract_api_body,
+    )
+
+
+def places_nearby_search(
+    client,
+    location,
+    field_mask,
+    radius,
+    included_types=None,
+    excluded_types=None,
+    included_primary_types=None,
+    excluded_primary_types=None,
+    max_result_count=None,
+    rank_preference=None,
+    language_code=None,
+    region_code=None,
+    include_pure_service_area_businesses=None,
+    include_future_opening_businesses=None,
+):
+    """Runs a Places API (New) Nearby Search request."""
+    _require_field_mask(field_mask, "places_nearby_search")
+
+    request_body = {
+        "locationRestriction": {
+            "circle": {
+                "center": _format_new_location(location),
+                "radius": radius,
+            }
+        }
+    }
+    if included_types:
+        request_body["includedTypes"] = included_types
+    if excluded_types:
+        request_body["excludedTypes"] = excluded_types
+    if included_primary_types:
+        request_body["includedPrimaryTypes"] = included_primary_types
+    if excluded_primary_types:
+        request_body["excludedPrimaryTypes"] = excluded_primary_types
+    if max_result_count is not None:
+        request_body["maxResultCount"] = max_result_count
+    if rank_preference:
+        request_body["rankPreference"] = rank_preference
+    if language_code:
+        request_body["languageCode"] = language_code
+    if region_code:
+        request_body["regionCode"] = region_code
+    if include_pure_service_area_businesses is not None:
+        request_body["includePureServiceAreaBusinesses"] = include_pure_service_area_businesses
+    if include_future_opening_businesses is not None:
+        request_body["includeFutureOpeningBusinesses"] = include_future_opening_businesses
+
+    return modern_api_request(
+        client,
+        "/v1/places:searchNearby",
+        base_url=_PLACES_NEW_BASE_URL,
+        post_json=request_body,
+        headers=_new_places_headers(field_mask),
+        extract_body=extract_api_body,
+    )
+
+
+def place_details(client, place_id, field_mask, language_code=None, region_code=None):
+    """Returns Place Details using Places API (New)."""
+    _require_field_mask(field_mask, "place_details")
+    params = {}
+    if language_code:
+        params["languageCode"] = language_code
+    if region_code:
+        params["regionCode"] = region_code
+
+    return modern_api_request(
+        client,
+        "/v1/places/%s" % place_id,
+        base_url=_PLACES_NEW_BASE_URL,
+        params=params,
+        headers=_new_places_headers(field_mask),
+        extract_body=extract_api_body,
+    )
+
+
+def place_photo(client, name, max_width_px=None, max_height_px=None,
+                skip_http_redirect=False):
+    """Downloads or resolves photo media using Place Photos (New)."""
+    if not max_width_px and not max_height_px:
+        raise ValueError("Specify max_width_px, max_height_px, or both")
+
+    if not name:
+        raise ValueError("Photo resource name is required")
+
+    photo_name = name
+    if not photo_name.endswith("/media"):
+        photo_name = "%s/media" % photo_name.rstrip("/")
+
+    params = {}
+    if max_width_px:
+        params["maxWidthPx"] = max_width_px
+    if max_height_px:
+        params["maxHeightPx"] = max_height_px
+    if skip_http_redirect:
+        params["skipHttpRedirect"] = "true"
+
+    authed_url = client._generate_auth_url(
+        "/v1/%s" % photo_name,
+        params,
+        accepts_clientid=False,
+    )
+
+    if skip_http_redirect:
+        return modern_api_request(
+            client,
+            "/v1/%s" % photo_name,
+            base_url=_PLACES_NEW_BASE_URL,
+            params=params,
+            extract_body=extract_api_body,
+        )
+
+    return request_binary_content(client, _PLACES_NEW_BASE_URL + authed_url)
+
+
+def places_autocomplete_new(
+    client,
+    input_text,
+    field_mask,
+    session_token=None,
+    location_bias=None,
+    location_restriction=None,
+    origin=None,
+    included_primary_types=None,
+    included_region_codes=None,
+    language_code=None,
+    region_code=None,
+    input_offset=None,
+    include_query_predictions=None,
+):
+    """Returns Autocomplete predictions using Places API (New)."""
+    _require_field_mask(field_mask, "places_autocomplete_new")
+    if location_bias and location_restriction:
+        raise ValueError("Specify either location_bias or location_restriction, not both")
+
+    request_body = {"input": input_text}
+    if session_token:
+        request_body["sessionToken"] = session_token
+    if location_bias:
+        request_body["locationBias"] = location_bias
+    if location_restriction:
+        request_body["locationRestriction"] = location_restriction
+    if origin:
+        request_body["origin"] = _format_new_location(origin)
+    if included_primary_types:
+        request_body["includedPrimaryTypes"] = included_primary_types
+    if included_region_codes:
+        request_body["includedRegionCodes"] = included_region_codes
+    if language_code:
+        request_body["languageCode"] = language_code
+    if region_code:
+        request_body["regionCode"] = region_code
+    if input_offset is not None:
+        request_body["inputOffset"] = input_offset
+    if include_query_predictions is not None:
+        request_body["includeQueryPredictions"] = include_query_predictions
+
+    return modern_api_request(
+        client,
+        "/v1/places:autocomplete",
+        base_url=_PLACES_NEW_BASE_URL,
+        post_json=request_body,
+        headers=_new_places_headers(field_mask),
+        extract_body=extract_api_body,
+    )

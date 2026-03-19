@@ -19,6 +19,7 @@
 
 from googlemaps._api import extract_api_body
 from googlemaps._api import format_lat_lng
+from googlemaps._api import modern_api_request
 
 
 _ROUTES_BASE_URL = "https://routes.googleapis.com"
@@ -236,14 +237,13 @@ def compute_routes(client, origin, destination, intermediates=None,
         # Default field mask for basic route info
         headers["X-Goog-FieldMask"] = "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline"
 
-    return client._request(
+    return modern_api_request(
+        client,
         "/directions/v2:computeRoutes",
-        {},
         base_url=_ROUTES_BASE_URL,
-        accepts_clientid=False,
-        extract_body=_routes_extract,
         post_json=request_body,
-        requests_kwargs={"headers": headers}
+        headers=headers,
+        extract_body=_routes_extract,
     )
 
 
@@ -364,12 +364,11 @@ def compute_route_matrix(client, origins, destinations, travel_mode=None,
         # Default field mask for basic matrix info
         headers["X-Goog-FieldMask"] = "originIndex,destinationIndex,status,condition,distanceMeters,duration"
 
-    return client._request(
+    return modern_api_request(
+        client,
         "/distanceMatrix/v2:computeRouteMatrix",
-        {},
         base_url=_ROUTES_BASE_URL,
-        accepts_clientid=False,
-        extract_body=_routes_extract,
         post_json=request_body,
-        requests_kwargs={"headers": headers}
+        headers=headers,
+        extract_body=_routes_extract,
     )

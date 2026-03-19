@@ -18,6 +18,7 @@
 
 """Tests for the places module."""
 
+import json
 import uuid
 import warnings
 
@@ -254,6 +255,168 @@ class PlacesTest(TestCase):
             "%s?input=pizza+near+New+York&key=%s" % (url, self.key),
             responses.calls[0].request.url,
         )
+
+    @responses.activate
+    def test_places_text_search_new(self):
+        url = "https://places.googleapis.com/v1/places:searchText"
+        responses.add(
+            responses.POST,
+            url,
+            body='{"places": [], "nextPageToken": "token"}',
+            status=200,
+            content_type="application/json",
+        )
+
+        self.client.places_text_search(
+            text_query="restaurant",
+            field_mask="places.displayName,nextPageToken",
+            language_code="en",
+            page_size=5,
+            location_bias={
+                "circle": {
+                    "center": {"latitude": -33.86746, "longitude": 151.207090},
+                    "radius": 500.0,
+                }
+            },
+            open_now=True,
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        request = responses.calls[0].request
+        self.assertEqual("POST", request.method)
+        self.assertEqual(
+            "places.displayName,nextPageToken",
+            request.headers["X-Goog-FieldMask"],
+        )
+        body = responses.calls[0].request.body
+        if isinstance(body, bytes):
+            body = body.decode("utf-8")
+        payload = json.loads(body)
+        self.assertEqual("restaurant", payload["textQuery"])
+        self.assertEqual(5, payload["pageSize"])
+        self.assertTrue(payload["openNow"])
+
+        with self.assertRaises(ValueError):
+            self.client.places_text_search("restaurant", field_mask=None)
+
+    @responses.activate
+    def test_places_nearby_search_new(self):
+        url = "https://places.googleapis.com/v1/places:searchNearby"
+        responses.add(
+            responses.POST,
+            url,
+            body='{"places": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        self.client.places_nearby_search(
+            location=self.location,
+            radius=250.0,
+            field_mask="places.displayName",
+            included_types=["restaurant"],
+            rank_preference="DISTANCE",
+            max_result_count=10,
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = responses.calls[0].request.body
+        if isinstance(body, bytes):
+            body = body.decode("utf-8")
+        payload = json.loads(body)
+        self.assertEqual(["restaurant"], payload["includedTypes"])
+        self.assertEqual(250.0, payload["locationRestriction"]["circle"]["radius"])
+        self.assertEqual("DISTANCE", payload["rankPreference"])
+
+    @responses.activate
+    def test_place_details_new(self):
+        url = "https://places.googleapis.com/v1/places/ChIJj61dQgK6j4AR4GeTYWZsKWw"
+        responses.add(
+            responses.GET,
+            url,
+            body='{"id": "ChIJj61dQgK6j4AR4GeTYWZsKWw"}',
+            status=200,
+            content_type="application/json",
+        )
+
+        self.client.place_details(
+            "ChIJj61dQgK6j4AR4GeTYWZsKWw",
+            field_mask="id,displayName",
+            language_code="en",
+            region_code="US",
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        self.assertEqual(
+            "id,displayName",
+            responses.calls[0].request.headers["X-Goog-FieldMask"],
+        )
+        self.assertIn("languageCode=en", responses.calls[0].request.url)
+
+    @responses.activate
+    def test_place_photo_new_binary(self):
+        url = "https://places.googleapis.com/v1/places/foo/photos/bar/media"
+        responses.add(responses.GET, url, status=200, body=b"img")
+
+        response = self.client.place_photo(
+            "places/foo/photos/bar",
+            max_width_px=400,
+        )
+
+        self.assertTrue(isinstance(response, GeneratorType) or isinstance(response, bytes))
+        self.assertEqual(1, len(responses.calls))
+        self.assertURLEqual(
+            "%s?maxWidthPx=400&key=%s" % (url, self.key),
+            responses.calls[0].request.url,
+        )
+
+    @responses.activate
+    def test_place_photo_new_json(self):
+        url = "https://places.googleapis.com/v1/places/foo/photos/bar/media"
+        responses.add(
+            responses.GET,
+            url,
+            body='{"name":"places/foo/photos/bar/media","photoUri":"https://example.com/photo"}',
+            status=200,
+            content_type="application/json",
+        )
+
+        result = self.client.place_photo(
+            "places/foo/photos/bar",
+            max_height_px=400,
+            skip_http_redirect=True,
+        )
+
+        self.assertEqual("https://example.com/photo", result["photoUri"])
+
+    @responses.activate
+    def test_places_autocomplete_new(self):
+        url = "https://places.googleapis.com/v1/places:autocomplete"
+        responses.add(
+            responses.POST,
+            url,
+            body='{"suggestions": []}',
+            status=200,
+            content_type="application/json",
+        )
+
+        self.client.places_autocomplete_new(
+            "pizza",
+            field_mask="suggestions.placePrediction.text.text",
+            session_token="token123",
+            include_query_predictions=True,
+            included_primary_types=["restaurant"],
+            origin=self.location,
+        )
+
+        self.assertEqual(1, len(responses.calls))
+        body = responses.calls[0].request.body
+        if isinstance(body, bytes):
+            body = body.decode("utf-8")
+        payload = json.loads(body)
+        self.assertEqual("pizza", payload["input"])
+        self.assertEqual("token123", payload["sessionToken"])
+        self.assertTrue(payload["includeQueryPredictions"])
 
     @responses.activate
     def test_find_place_with_deprecated_fields_warning(self):

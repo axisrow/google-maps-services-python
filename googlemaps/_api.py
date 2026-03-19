@@ -50,6 +50,40 @@ def extract_api_body(response):
     return body
 
 
+def modern_api_request(
+    client,
+    path,
+    *,
+    base_url,
+    params=None,
+    post_json=None,
+    field_mask=None,
+    headers=None,
+    extract_body=extract_api_body,
+):
+    """Perform a request against a newer Google Maps API surface.
+
+    Modern Google Maps APIs typically use dedicated hosts, JSON request bodies,
+    and field-mask headers. This helper centralizes that behavior while
+    preserving the client-level headers such as User-Agent.
+    """
+    request_headers = dict(client.requests_kwargs.get("headers", {}))
+    if headers:
+        request_headers.update(headers)
+    if field_mask:
+        request_headers["X-Goog-FieldMask"] = field_mask
+
+    return client._request(
+        path,
+        params or {},
+        base_url=base_url,
+        accepts_clientid=False,
+        extract_body=extract_body,
+        requests_kwargs={"headers": request_headers},
+        post_json=post_json,
+    )
+
+
 def format_lat_lng(location):
     """Normalize supported lat/lng inputs into a latitude/longitude dict."""
     if isinstance(location, (tuple, list)):

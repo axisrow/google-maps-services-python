@@ -426,7 +426,13 @@ from googlemaps.places import place
 from googlemaps.places import places_photo
 from googlemaps.places import places_autocomplete
 from googlemaps.places import places_autocomplete_query
+from googlemaps.places import places_text_search
+from googlemaps.places import places_nearby_search
+from googlemaps.places import place_details
+from googlemaps.places import place_photo
+from googlemaps.places import places_autocomplete_new
 from googlemaps.maps import static_map
+from googlemaps.streetview import street_view
 from googlemaps.addressvalidation import addressvalidation
 from googlemaps.airquality import current_air_quality
 from googlemaps.airquality import air_quality_forecast
@@ -439,9 +445,11 @@ from googlemaps.weather import current_weather
 from googlemaps.weather import weather_forecast
 from googlemaps.weather import weather_hourly_forecast
 from googlemaps.weather import historical_weather
+from googlemaps.weather import weather_alerts
 from googlemaps.routes import compute_routes
 from googlemaps.routes import compute_route_matrix
 from googlemaps.route_optimization import optimize_tour
+from googlemaps.route_optimization import batch_optimize_tours
 from googlemaps.solar import building_insights
 from googlemaps.solar import solar_data_layers
 from googlemaps.solar import geo_tiff
@@ -487,7 +495,13 @@ Client.place = make_api_method(place)
 Client.places_photo = make_api_method(places_photo)
 Client.places_autocomplete = make_api_method(places_autocomplete)
 Client.places_autocomplete_query = make_api_method(places_autocomplete_query)
+Client.places_text_search = make_api_method(places_text_search)
+Client.places_nearby_search = make_api_method(places_nearby_search)
+Client.place_details = make_api_method(place_details)
+Client.place_photo = make_api_method(place_photo)
+Client.places_autocomplete_new = make_api_method(places_autocomplete_new)
 Client.static_map = make_api_method(static_map)
+Client.street_view = make_api_method(street_view)
 Client.addressvalidation = make_api_method(addressvalidation)
 Client.current_air_quality = make_api_method(current_air_quality)
 Client.air_quality_forecast = make_api_method(air_quality_forecast)
@@ -500,9 +514,11 @@ Client.current_weather = make_api_method(current_weather)
 Client.weather_forecast = make_api_method(weather_forecast)
 Client.weather_hourly_forecast = make_api_method(weather_hourly_forecast)
 Client.historical_weather = make_api_method(historical_weather)
+Client.weather_alerts = make_api_method(weather_alerts)
 Client.compute_routes = make_api_method(compute_routes)
 Client.compute_route_matrix = make_api_method(compute_route_matrix)
 Client.optimize_tour = make_api_method(optimize_tour)
+Client.batch_optimize_tours = make_api_method(batch_optimize_tours)
 Client.building_insights = make_api_method(building_insights)
 Client.solar_data_layers = make_api_method(solar_data_layers)
 Client.geo_tiff = make_api_method(geo_tiff)

@@ -133,6 +133,41 @@ class RouteOptimizationTest(GoogleMapsClientTestCase):
         with self.assertRaises(ValueError):
             self.client.optimize_tour(parent="my-project", model=model)
 
+    @responses.activate
+    def test_batch_optimize_tours(self):
+        responses.add(
+            responses.POST,
+            "https://routeoptimization.googleapis.com/v1/projects/my-project:batchOptimizeTours",
+            body='{"name": "operations/123", "done": false}',
+            status=200,
+            content_type="application/json",
+        )
+
+        result = self.client.batch_optimize_tours(
+            parent="projects/my-project",
+            requests=[
+                {
+                    "model": {
+                        "shipments": [],
+                        "vehicles": [],
+                    }
+                }
+            ],
+            timeout="60s",
+        )
+
+        self.assertEqual("operations/123", result["name"])
+        body = json.loads(responses.calls[0].request.body)
+        self.assertEqual("projects/my-project", body["parent"])
+        self.assertEqual("60s", body["timeout"])
+
+    def test_batch_optimize_tours_requires_requests(self):
+        with self.assertRaises(ValueError):
+            self.client.batch_optimize_tours(
+                parent="projects/my-project",
+                requests=[],
+            )
+
     def test_format_ro_location_tuple(self):
         result = route_optimization._format_ro_location((40.0, -74.0))
         self.assertEqual(result, {"latLng": {"latitude": 40.0, "longitude": -74.0}})
